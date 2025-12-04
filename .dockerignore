@@ -1,0 +1,47 @@
+# Version control
+.git
+.gitignore
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+test
+tests
+
+# Development files
+.env
+.env.*
+secrets/
+*.pem
+*.key
+
+# Documentation
+*.md
+README*
+LICENSE
+
+# CI/CD
+.github
+.gitlab-ci.yml
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Compose and Make
+compose.yaml
+compose.yml
+docker-compose.yaml
+docker-compose.yml
+Makefile
