@@ -1,0 +1,87 @@
+services:
+  app-container:
+    build:
+      context: ./build
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      database-container:
+        condition: service_healthy
+    env_file:
+      - ./secrets/.env
+    environment:
+      # DEBUG: "true"
+      POSTGRES_HOST: database-container
+      POSTGRES_PORT: 5432
+    volumes:
+      - type: bind
+        source: ./logs
+        target: /app/logs
+        read_only: false
+      - type: bind
+        source: ./build/main
+        target: /app/main
+        read_only: false
+    networks:
+      - app-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    restart: unless-stopped
+
+  database-container:
+    image: postgres:17-alpine
+    # For debug purpose only, no need to expose the database in production
+    # ports:
+    #   - "127.0.0.1:5432:5432"
+    expose:
+      - "5432"
+    env_file:
+      - ./secrets/.env
+    environment:
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      timeout: 10s
+      interval: 5s
+      retries: 5
+      start_period: 10s
+    volumes:
+      - ./sqlc/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+      - database-data:/var/lib/postgresql/data
+    networks:
+      - app-network
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+      - DAC_OVERRIDE
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    restart: unless-stopped
+    shm_size: 128mb
+networks:
+  app-network:
+
+volumes:
+  database-data:
