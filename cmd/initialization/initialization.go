@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/hmcalister/Go-Compose-Template/internal/database"
+	"github.com/hmcalister/LiteralCloudService/internal/database"
 	"github.com/jackc/pgx/v5"
 )
 

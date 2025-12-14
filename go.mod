@@ -1,4 +1,4 @@
-module github.com/hmcalister/Go-Compose-Template
+module github.com/hmcalister/LiteralCloudService
 
 go 1.25.0
 

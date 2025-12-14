@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/hmcalister/Go-Compose-Template/cmd/initialization"
+	"github.com/hmcalister/LiteralCloudService/cmd/initialization"
 )
 
 func main() {
