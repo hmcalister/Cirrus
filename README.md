@@ -13,10 +13,12 @@ The complete rewrite of the Literal Cloud Service — a daily server of cloud im
     - Repository pattern
         - ImageRepository
             - GetImage
-        - AuthenticationProviderRepository
-            - ProduceSession
         - EmailSenderRepository
             - SendEmail
+    - Strategy Pattern
+        - For authentication method to produce auth tokes
+        - Use https://github.com/aidantwoods/go-paseto for token
+        - Use https://github.com/markbates/goth for OAuth2
     - Account management
         - Create account
             - Authentication, Oauth
