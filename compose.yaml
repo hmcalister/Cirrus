@@ -15,12 +15,12 @@ services:
       POSTGRES_PORT: 5432
     volumes:
       - type: bind
-        source: ./logs
-        target: /app/logs
-        read_only: false
-      - type: bind
         source: ./build/main
         target: /app/main
+        read_only: false
+      - type: volume
+        source: app-logs
+        target: /app/logs
         read_only: false
     networks:
       - app-network
@@ -80,8 +80,10 @@ services:
           memory: 256M
     restart: unless-stopped
     shm_size: 128mb
+
 networks:
   app-network:
 
 volumes:
   database-data:
+  app-logs:
