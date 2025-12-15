@@ -59,7 +59,7 @@ func initializeGothWithAllProviders() error {
 	} {
 		gothProvider, err := loadOAuth2ConfigToProvider(providerName, constructor)
 		if err != nil {
-			slog.Warn(
+			slog.Error(
 				"oAuth2 config failed to load",
 				"providerName", providerName,
 				"error", err,
