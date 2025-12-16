@@ -1,6 +1,7 @@
 .PHONY: build run sqlcGenerate appBuild podmanBuild podmanClean podmanRun
 
-include secrets/.env
+# include secrets/.env.prod
+include secrets/.env.test
 export
 
 build: sqlcGenerate appBuild podmanBuild
