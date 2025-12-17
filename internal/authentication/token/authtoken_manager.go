@@ -1,5 +1,7 @@
 package token
 
+import "github.com/hmcalister/LiteralCloudService/internal/database"
+
 type AuthTokenManager interface {
 	// Create a token with the given claims and return it.
 	// The returned token should be ready for transmission across the public internet,
@@ -10,4 +12,11 @@ type AuthTokenManager interface {
 	// Returns encrypted claims and true if token is valid,
 	// or an empty map and false if the token is invalid.
 	VerifyToken(token string) (claims map[string]interface{}, ok bool)
+}
+
+func UserToTokenClaims(user database.User) map[string]interface{} {
+	return map[string]interface{}{
+		"id":    user.UserID,
+		"email": user.Email,
+	}
 }
