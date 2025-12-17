@@ -1,0 +1,67 @@
+package authentication
+
+import (
+	"errors"
+	"net/http"
+
+	"github.com/hmcalister/LiteralCloudService/internal/authentication/authstrategy"
+	"github.com/hmcalister/LiteralCloudService/internal/authentication/token"
+	"github.com/hmcalister/LiteralCloudService/internal/database"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+var (
+	ErrInvalidCredentials   = errors.New("invalid credentials")
+	ErrUserNotFound         = errors.New("user not found")
+	ErrAuthMethodExists     = errors.New("authentication method already exists for this user")
+	ErrAuthStrategyNotFound = errors.New("authentication strategy not found")
+)
+
+// Create an authentication manager to handle auth for the app.
+// Flows look like creating a manager, add strategies (AddStrategy),
+// and mounting the authSubrouter to the `/auth` route.
+//
+// Strategies will detail what routes will exist.
+// Users will receive auth tokens which make (signed) claims about identity from
+// strategies in the subroutes.
+//
+// Once created, mount the subrouter to the `/auth` route.
+type AuthenticationManager struct {
+	db                      *database.Queries
+	connPool                *pgxpool.Pool
+	authTokenManager        token.AuthTokenManager
+	strategies              map[string]authstrategy.AuthenticationStrategy
+	authenticationSubrouter *http.ServeMux
+}
+
+func NewAuthenticationManager(
+	db *database.Queries,
+	connPool *pgxpool.Pool,
+	authTokenManager token.AuthTokenManager,
+) *AuthenticationManager {
+	return &AuthenticationManager{
+		strategies:              make(map[string]authstrategy.AuthenticationStrategy),
+		db:                      db,
+		connPool:                connPool,
+		authTokenManager:        authTokenManager,
+		authenticationSubrouter: http.NewServeMux(),
+	}
+}
+
+// This subrouter must be mounted to `/auth`
+// Requests should look like `/auth/{authType}/...`
+//
+// For example, password auth would make requests to `/auth/password`
+// OAuth2 with Google would make requests to `/auth/oauth2_google` and callback `/auth/oauth2_google/callback`
+func (am *AuthenticationManager) GetAuthenticationSubrouter() *http.ServeMux {
+	return am.authenticationSubrouter
+}
+
+func (am *AuthenticationManager) RegisterStrategy(strategy authstrategy.AuthenticationStrategy) {
+	strategy.SetDatabase(am.db, am.connPool)
+	strategy.SetAuthTokenManager(am.authTokenManager)
+
+	authType := strategy.GetAuthType()
+	am.strategies[authType] = strategy
+	am.authenticationSubrouter.Handle(authType, http.StripPrefix(authType, strategy.GetRouter()))
+}
