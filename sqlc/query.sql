@@ -1,7 +1,10 @@
--- name: CreateUser :one
--- Creates a new user with email
+-- name: UpsertUser :one
+-- Creates a new user with email. If the email already exists, do nothing.
 INSERT INTO users (email)
 VALUES ($1)
+ON CONFLICT (email) 
+DO UPDATE SET
+    updated_at = NOW()
 RETURNING *;
 
 -- name: GetUserByID :one
@@ -28,50 +31,58 @@ WHERE user_id = $1
 RETURNING *;
 
 -- ------------------------------------------------------------------------------
+-- Password authentication methods
 
--- name: CreateAuthenticationMethod :one
--- Creates a new authentication method for a user
-INSERT INTO user_authentication_methods (user_id, auth_type, auth_identifier, auth_metadata)
-VALUES ($1, $2, $3, $4)
+-- name: CreatePasswordAuthentication :one
+-- Creates a new password authentication method for a user
+INSERT INTO user_authentication_password (email, hashed_password, salt)
+VALUES ($1, $2, $3)
 RETURNING *;
 
--- name: GetAuthenticationMethod :one
--- Retrieves a specific authentication method for a user
-SELECT * FROM user_authentication_methods
-WHERE user_id = $1 AND auth_type = $2;
+-- name: GetPasswordAuthentication :one
+-- Retrieves the hashed password and salt for a user
+SELECT * FROM user_authentication_password
+WHERE email = $1;
 
--- name: GetAuthenticationMethodsByUserID :many
--- Retrieves all authentication methods for a user
-SELECT * FROM user_authentication_methods
-WHERE user_id = $1;
-
--- name: GetUserByAuthTypeAndIdentifier :one
--- Finds a user by their authentication type and identifier
--- Used during login to find which user owns this auth credential
-SELECT u.* FROM users u
-INNER JOIN user_authentication_methods uam ON u.user_id = uam.user_id
-WHERE uam.auth_type = $1 AND uam.auth_identifier = $2;
-
--- name: UpdateAuthenticationIdentifier :one
--- Updates the auth_identifier for a user's authentication method (e.g., password change)
-UPDATE user_authentication_methods
-SET auth_identifier = $3
-WHERE user_id = $1 AND auth_type = $2
+-- name: UpdatePassword :one
+-- Updates the password and salt for a user
+UPDATE user_authentication_password
+SET hashed_password = $2, salt = $3
+WHERE email = $1
 RETURNING *;
 
--- name: UpdateAuthenticationMetadata :one
--- Updates the auth_metadata for a user's authentication method (e.g., OAuth2 tokens)
-UPDATE user_authentication_methods
-SET auth_metadata = $3
-WHERE user_id = $1 AND auth_type = $2
+-- name: DeletePasswordAuthentication :exec
+-- Removes password authentication from a user
+DELETE FROM user_authentication_password
+WHERE email = $1;
+
+-- ------------------------------------------------------------------------------
+-- OAuth2 authentication methods
+
+-- name: CreateOAuth2Authentication :one
+-- Creates a new OAuth2 authentication method for a user
+INSERT INTO user_authentication_oauth2 (user_id, oauth2_provider, provider_user_id)
+VALUES ($1, $2, $3)
 RETURNING *;
 
--- name: DeleteAuthenticationMethod :exec
--- Removes an authentication method from a user
-DELETE FROM user_authentication_methods
-WHERE user_id = $1 AND auth_type = $2;
+-- name: GetOAuth2Authentication :one
+-- Retrieves a specific OAuth2 authentication method for a user
+SELECT * FROM user_authentication_oauth2
+WHERE user_id = $1 AND oauth2_provider = $2;
 
--- name: DeleteAllAuthenticationMethods :exec
--- Removes all authentication methods for a user (used during account deletion)
-DELETE FROM user_authentication_methods
+-- name: UpdateOAuth2Authentication :one
+-- Updates the oauth2 authentication for a user
+UPDATE user_authentication_oauth2
+SET oauth2_provider = $2, provider_user_id = $3
+WHERE user_id = $1
+RETURNING *;
+
+-- name: DeleteOAuth2Authentication :exec
+-- Removes an OAuth2 authentication method from a user
+DELETE FROM user_authentication_oauth2
+WHERE user_id = $1 AND oauth2_provider = $2;
+
+-- name: DeleteAllOAuth2Authentication :exec
+-- Removes all OAuth2 authentication methods for a user
+DELETE FROM user_authentication_oauth2
 WHERE user_id = $1;

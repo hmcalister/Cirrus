@@ -3,27 +3,26 @@ CREATE TABLE users (
     email VARCHAR(255) UNIQUE NOT NULL,
     active  BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    last_login TIMESTAMP
 );
-CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_active ON users(active);
 
 -- ------------------------------------------------------------------------------
 
-CREATE TABLE user_authentication_methods (
+CREATE TABLE user_authentication_password (
+    email VARCHAR(255) PRIMARY KEY REFERENCES users(email) ON DELETE CASCADE,
+    hashed_password BYTEA NOT NULL,
+    salt BYTEA NOT NULL
+);
+
+CREATE TABLE user_authentication_oauth2 (
     user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
 
-    -- auth_type: 'password', 'oauth2_google', 'oauth2_github', etc.
-    auth_type VARCHAR(50) NOT NULL,
+    -- 'google', 'github', etc.
+    oauth2_provider VARCHAR(32) NOT NULL,
+    provider_user_id VARCHAR(255) NOT NULL,
 
-    -- For password auth: stores bcrypt hashed password
-    -- For OAuth2: stores provider user ID
-    auth_identifier VARCHAR(255) NOT NULL,
-
-    -- For OAuth2: stores access tokens, refresh tokens (encrypted)
-    -- For password: NULL
-    auth_metadata JSONB,
-
-    PRIMARY KEY (user_id, auth_type)
+    PRIMARY KEY (user_id, oauth2_provider)
 );
-CREATE INDEX idx_auth_methods_type_identifier ON user_authentication_methods(auth_type, auth_identifier);
+CREATE INDEX idx_user_authentication_oauth2_provider_info ON user_authentication_oauth2(oauth2_provider, provider_user_id);
