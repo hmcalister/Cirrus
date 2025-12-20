@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -39,17 +41,17 @@ func (passwordStrategy PasswordAuthenticationStrategy) GetAuthType() string {
 	return "password"
 }
 
-// Requests to authenticate have form data of (email, password)
 func (passwordStrategy PasswordAuthenticationStrategy) authenticate(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "could not parse form in password authentication", http.StatusBadRequest)
+
+	email, requestPassword, err := passwordStrategy.extractEmailPasswordFromRequest(r)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	email := r.PostFormValue("email")
-	requestPassword := r.PostFormValue("password")
 	if email == "" || requestPassword == "" {
-		http.Error(w, "form is missing field in password authentication", http.StatusBadRequest)
+		http.Error(w, "request is missing field in password authentication", http.StatusBadRequest)
 		return
 	}
 
@@ -72,7 +74,7 @@ func (passwordStrategy PasswordAuthenticationStrategy) authenticate(w http.Respo
 	}
 
 	// --------------------------------------------------------------------------------
-	// The user is now authenticated, and we may return the Paseto token
+	// The user is now authenticated, and we may return the auth token
 
 	user, err := passwordStrategy.db.GetUserByEmail(ctx, email)
 	if err != nil {
@@ -82,17 +84,17 @@ func (passwordStrategy PasswordAuthenticationStrategy) authenticate(w http.Respo
 	passwordStrategy.respondWithAuthToken(w, user)
 }
 
-// Requests to register have form data of (email, password)
 func (passwordStrategy PasswordAuthenticationStrategy) register(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "could not parse form in password authentication", http.StatusBadRequest)
+
+	email, requestPassword, err := passwordStrategy.extractEmailPasswordFromRequest(r)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	email := r.PostFormValue("email")
-	requestPassword := r.PostFormValue("password")
 	if email == "" || requestPassword == "" {
-		http.Error(w, "form is missing field in password authentication", http.StatusBadRequest)
+		http.Error(w, "request is missing field in password authentication", http.StatusBadRequest)
 		return
 	}
 
@@ -163,6 +165,30 @@ func (passwordStrategy PasswordAuthenticationStrategy) register(w http.ResponseW
 		return
 	}
 	passwordStrategy.respondWithAuthToken(w, user)
+}
+
+func (passwordStrategy PasswordAuthenticationStrategy) extractEmailPasswordFromRequest(r *http.Request) (email string, requestPassword string, err error) {
+
+	contentType := r.Header.Get("Content-Type")
+	if contentType == "application/json" {
+		var req struct {
+			Email    string `json:"email"`
+			Password string `json:"password"`
+		}
+		if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+			return "", "", errors.New("could not parse JSON in password authentication")
+		}
+		email = req.Email
+		requestPassword = req.Password
+	} else {
+		if err = r.ParseForm(); err != nil {
+			return "", "", errors.New("could not parse form in password authentication")
+		}
+		email = r.PostFormValue("email")
+		requestPassword = r.PostFormValue("password")
+	}
+
+	return email, requestPassword, nil
 }
 
 // Validate the given password.
