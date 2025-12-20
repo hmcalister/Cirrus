@@ -61,7 +61,8 @@ func (am *AuthenticationManager) RegisterStrategy(strategy authstrategy.Authenti
 	strategy.SetDatabase(am.db, am.connPool)
 	strategy.SetAuthTokenManager(am.authTokenManager)
 
-	authType := strategy.GetAuthType()
-	am.strategies[authType] = strategy
-	am.authenticationSubrouter.Handle(authType, http.StripPrefix(authType, strategy.GetRouter()))
+	am.authenticationSubrouter.Handle(
+		authType,
+		http.StripPrefix(fmt.Sprintf("/auth/%s/", authType), strategy.GetRouter()),
+	)
 }
