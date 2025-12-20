@@ -51,6 +51,13 @@ func (am *AuthenticationManager) GetAuthenticationSubrouter() *http.ServeMux {
 }
 
 func (am *AuthenticationManager) RegisterStrategy(strategy authstrategy.AuthenticationStrategy) {
+	authType := strategy.GetAuthType()
+	if _, ok := am.strategies[authType]; ok {
+		// Duplicate strategy to be registered, ignore
+		return
+	}
+	am.strategies[authType] = strategy
+
 	strategy.SetDatabase(am.db, am.connPool)
 	strategy.SetAuthTokenManager(am.authTokenManager)
 
