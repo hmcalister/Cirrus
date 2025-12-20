@@ -11,34 +11,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/hmcalister/LiteralCloudService/internal/authentication/oauth2utils"
 	"github.com/hmcalister/LiteralCloudService/internal/database"
 	"golang.org/x/oauth2"
-	"golang.org/x/oauth2/github"
-	"golang.org/x/oauth2/google"
-)
-
-// Handler for OAuth2 access tokens.
-// Manages the provider-specific routes for OAuth2 flows.
-// Use an existing function from the exposed OAUTH2_ACCESS_TOKEN_HANDLER_MAP or provide your own.
-type AccessTokenHandler = func(token *oauth2.Token) (r *http.Response, err error)
-
-var (
-	OAUTH2_ENDPOINT_MAP = map[string]oauth2.Endpoint{
-		"google": google.Endpoint,
-		"github": github.Endpoint,
-	}
-
-	OAUTH2_ACCESS_TOKEN_HANDLER_MAP = map[string]AccessTokenHandler{
-		"google": func(token *oauth2.Token) (r *http.Response, err error) {
-			return http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + token.AccessToken)
-		},
-		"github": func(token *oauth2.Token) (r *http.Response, err error) {
-			client := &http.Client{}
-			req, _ := http.NewRequest("GET", "https://api.github.com/user", nil)
-			req.Header.Add("Authorization", "Bearer "+token.AccessToken)
-			return client.Do(req)
-		},
-	}
 )
 
 // Define an OAuth2AuthenticationStrategy that authenticates a user using OAuth2.
@@ -54,7 +29,7 @@ type OAuth2AuthenticationStrategy struct {
 
 	// Handler for OAuth2 access tokens.
 	// Manages the provider-specific routes for OAuth2 flows.
-	accessTokenHandler AccessTokenHandler
+	accessTokenHandler oauth2utils.AccessTokenHandler
 }
 
 // Creates a new OAuth2 strategy for a specific provider (e.g., "google", "github")
@@ -67,7 +42,7 @@ type OAuth2AuthenticationStrategy struct {
 func NewOAuth2Strategy(
 	providerName string,
 	providerEndpoint oauth2.Endpoint,
-	providerAccessTokenHandler AccessTokenHandler,
+	providerAccessTokenHandler oauth2utils.AccessTokenHandler,
 	scopes []string,
 ) (*OAuth2AuthenticationStrategy, error) {
 	oauth2Strategy := &OAuth2AuthenticationStrategy{
@@ -116,7 +91,7 @@ func (oauth2Strategy *OAuth2AuthenticationStrategy) initiateAuth(w http.Response
 		Path:     "/auth",
 		MaxAge:   600, // 10 minutes
 		HttpOnly: true,
-		Secure:   os.Getenv("ENVIRONMENT") == "PRODUCTION",
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 	})
 
