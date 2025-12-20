@@ -1,20 +1,13 @@
 package authentication
 
 import (
-	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/hmcalister/LiteralCloudService/internal/authentication/authstrategy"
 	"github.com/hmcalister/LiteralCloudService/internal/authentication/token"
 	"github.com/hmcalister/LiteralCloudService/internal/database"
 	"github.com/jackc/pgx/v5/pgxpool"
-)
-
-var (
-	ErrInvalidCredentials   = errors.New("invalid credentials")
-	ErrUserNotFound         = errors.New("user not found")
-	ErrAuthMethodExists     = errors.New("authentication method already exists for this user")
-	ErrAuthStrategyNotFound = errors.New("authentication strategy not found")
 )
 
 // Create an authentication manager to handle auth for the app.
