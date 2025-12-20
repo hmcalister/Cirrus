@@ -204,6 +204,8 @@ func (oauth2Strategy *OAuth2AuthenticationStrategy) handleCallback(w http.Respon
 
 func (oauth2Strategy OAuth2AuthenticationStrategy) generateStateToken() string {
 	b := make([]byte, 32)
+	// Returned error is never possible; rand.Read panics instead.
+	// The returned error is left over from an old implementation.
 	rand.Read(b)
 	return base64.URLEncoding.EncodeToString(b)
 }
