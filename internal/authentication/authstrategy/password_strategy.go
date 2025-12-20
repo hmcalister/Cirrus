@@ -5,12 +5,10 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"database/sql"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 
-	"github.com/hmcalister/LiteralCloudService/internal/authentication/token"
 	"github.com/hmcalister/LiteralCloudService/internal/database"
 	"golang.org/x/crypto/argon2"
 )
@@ -81,11 +79,7 @@ func (passwordStrategy PasswordAuthenticationStrategy) authenticate(w http.Respo
 		http.Error(w, "failed to retrieve user data from database in password authentication", http.StatusInternalServerError)
 		return
 	}
-	claims := token.UserToTokenClaims(user)
-	authToken := passwordStrategy.authTokenManager.CreateToken(claims)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(fmt.Sprintf(`{"authToken": "%s"}`, authToken)))
+	passwordStrategy.respondWithAuthToken(w, user)
 }
 
 // Requests to register have form data of (email, password)
@@ -168,11 +162,7 @@ func (passwordStrategy PasswordAuthenticationStrategy) register(w http.ResponseW
 		http.Error(w, "failed to retrieve user data from database in password authentication", http.StatusInternalServerError)
 		return
 	}
-	claims := token.UserToTokenClaims(user)
-	authToken := passwordStrategy.authTokenManager.CreateToken(claims)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(fmt.Sprintf(`{"authToken": "%s"}`, authToken)))
+	passwordStrategy.respondWithAuthToken(w, user)
 }
 
 // Validate the given password.

@@ -11,7 +11,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/hmcalister/LiteralCloudService/internal/authentication/token"
 	"github.com/hmcalister/LiteralCloudService/internal/database"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/github"
@@ -225,11 +224,7 @@ func (oauth2Strategy *OAuth2AuthenticationStrategy) handleCallback(w http.Respon
 	// Transaction End
 	// --------------------------------------------------------------------------------
 
-	claims := token.UserToTokenClaims(user)
-	userAuthToken := oauth2Strategy.authTokenManager.CreateToken(claims)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(fmt.Sprintf(`{"authToken": "%s"}`, userAuthToken)))
+	oauth2Strategy.respondWithAuthToken(w, user)
 }
 
 func (oauth2Strategy OAuth2AuthenticationStrategy) generateStateToken() string {

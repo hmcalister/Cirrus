@@ -1,8 +1,10 @@
 package authstrategy
 
 import (
+	"fmt"
 	"net/http"
 
+	"github.com/hmcalister/LiteralCloudService/internal/authentication/claims"
 	"github.com/hmcalister/LiteralCloudService/internal/authentication/token"
 	"github.com/hmcalister/LiteralCloudService/internal/database"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -58,4 +60,14 @@ func (base *baseAuthenticationStrategy) SetDatabase(db *database.Queries, connPo
 
 func (base *baseAuthenticationStrategy) SetAuthTokenManager(authTokenManager token.AuthTokenManager) {
 	base.authTokenManager = authTokenManager
+}
+
+// Respond to the authentication request with the corresponding auth token
+// Only to be called once a user has been authenticated
+func (base *baseAuthenticationStrategy) respondWithAuthToken(w http.ResponseWriter, user database.User) {
+	claims := claims.UserToTokenClaims(user)
+	authToken := base.authTokenManager.CreateToken(claims)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(fmt.Sprintf(`{"authToken": "%s"}`, authToken)))
 }
