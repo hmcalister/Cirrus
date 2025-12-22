@@ -2,19 +2,16 @@ services:
   app-container:
     build:
       context: ./build
+      dockerfile: Dockerfile
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:
       database-container:
         condition: service_healthy
     env_file:
-      - ./secrets/${ENV_FILE}
+      - ${ENV_FILE}
       # - ./secrets/oauth_google.env
       # - ./secrets/oauth_github.env
-    environment:
-      # DEBUG: "true"
-      POSTGRES_HOST: database-container
-      POSTGRES_PORT: 5432
     volumes:
       - type: bind
         source: ./build/main
@@ -68,7 +65,7 @@ services:
     expose:
       - "5432"
     env_file:
-      - ./secrets/${ENV_FILE}
+      - ${ENV_FILE}
     environment:
       POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
     healthcheck:
@@ -79,7 +76,7 @@ services:
       start_period: 10s
     volumes:
       - ./sqlc/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
-      - ${PODMAN_DATABASE_VOLUME_NAME}:/var/lib/postgresql/data
+      - database-data:/var/lib/postgresql/data
     networks:
       - app-network
     security_opt:
@@ -106,5 +103,6 @@ networks:
   app-network:
 
 volumes:
-  ${PODMAN_DATABASE_VOLUME_NAME}:
+  database-data:
+    name: ${PODMAN_DATABASE_VOLUME_NAME}
   app-logs:

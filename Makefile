@@ -1,7 +1,10 @@
 .PHONY: build run sqlcGenerate appBuild podmanBuild podmanClean podmanRun
 
-# include secrets/.env.prod
-include secrets/.env.test
+ifndef ENV_FILE
+$(error ENV_FILE is not set. Please set it to the path of your environment file, e.g., ENV_FILE=secrets/.env)
+endif
+
+include ${ENV_FILE}
 export
 
 build: sqlcGenerate appBuild podmanBuild
