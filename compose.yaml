@@ -41,6 +41,25 @@ services:
           memory: 128M
     restart: unless-stopped
 
+  test-container:
+    build:
+      context: .
+      dockerfile: ./build/test.Dockerfile
+    depends_on:
+      database-container:
+        condition: service_healthy
+    env_file:
+      - ${ENV_FILE}
+    volumes:
+      - type: bind
+        source: .
+        target: /app
+        read_only: false
+    networks:
+      - app-network
+    profiles:  # Not started by default, only when --profile test is used in podman compose
+      - test
+
   database-container:
     image: postgres:17-alpine
     # For debug purpose only, no need to expose the database in production
