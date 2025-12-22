@@ -194,14 +194,12 @@ func (passwordStrategy PasswordAuthenticationStrategy) validatePassword(rawPassw
 
 // Generate a new salt and return it.
 //
-// This function can error if a kernel function errors, although this should never happen.
-func (passwordStrategy PasswordAuthenticationStrategy) generateSalt() ([]byte, error) {
+// This function can panic if a kernel function errors, although this should never happen by the rand package documentation.
+func (passwordStrategy PasswordAuthenticationStrategy) generateSalt() []byte {
 	salt := make([]byte, passwordStrategy_SaltLen)
-	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
-		return nil, err
-	}
-
-	return salt, nil
+	// rand.Read returns an error only for backwards compatibility. The error value is always nil.
+	rand.Read(salt)
+	return salt
 }
 
 // Perform the hash of a (plaintext) password with salt.
