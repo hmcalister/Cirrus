@@ -62,7 +62,7 @@ func (am *AuthenticationManager) RegisterStrategy(strategy authstrategy.Authenti
 	strategy.SetAuthTokenManager(am.authTokenManager)
 
 	am.authenticationSubrouter.Handle(
-		authType,
-		http.StripPrefix(fmt.Sprintf("/auth/%s/", authType), strategy.GetRouter()),
+		fmt.Sprintf("/%s/", authType),
+		http.StripPrefix(fmt.Sprintf("/%s", authType), strategy.GetRouter()),
 	)
 }
