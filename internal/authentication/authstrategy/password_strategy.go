@@ -4,10 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
-	"database/sql"
 	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 
@@ -57,7 +55,7 @@ func (passwordStrategy PasswordAuthenticationStrategy) authenticate(w http.Respo
 
 	ctx := context.Background()
 	passwordAuthenticationData, err := passwordStrategy.db.GetPasswordAuthentication(ctx, email)
-	if err == sql.ErrNoRows {
+	if passwordAuthenticationData.Email == "" {
 		http.Error(w, "email does not exist with password authentication", http.StatusBadRequest)
 		return
 	}
@@ -98,12 +96,7 @@ func (passwordStrategy PasswordAuthenticationStrategy) register(w http.ResponseW
 		return
 	}
 
-	salt, err := passwordStrategy.generateSalt()
-	if err != nil {
-		slog.Error("error generating salt during password strategy registration", "error", err)
-		http.Error(w, "error occurred in password authentication", http.StatusInternalServerError)
-		return
-	}
+	salt := passwordStrategy.generateSalt()
 	hashedPassword := passwordStrategy.calculateHash([]byte(requestPassword), salt)
 
 	if !passwordStrategy.validatePassword(requestPassword) {
@@ -113,8 +106,9 @@ func (passwordStrategy PasswordAuthenticationStrategy) register(w http.ResponseW
 
 	// Checking after hashing prevents timing attacks
 	ctx := context.Background()
-	_, err = passwordStrategy.db.GetPasswordAuthentication(ctx, email)
-	if err != sql.ErrNoRows {
+	existingUser, err := passwordStrategy.db.GetPasswordAuthentication(ctx, email)
+	// If rows exist it means the user already exists in the database
+	if existingUser.Email != "" {
 		http.Error(w, "error occurred in password authentication", http.StatusBadRequest)
 		return
 	}
