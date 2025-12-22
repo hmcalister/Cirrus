@@ -2,7 +2,6 @@ package token
 
 import (
 	"errors"
-	"os"
 	"time"
 
 	"aidanwoods.dev/go-paseto"
@@ -25,24 +24,16 @@ type PasetoManager struct {
 	parser    paseto.Parser
 }
 
-func NewPasetoMediator() (p *PasetoManager, err error) {
-	signingSecret := os.Getenv("PASETO_SIGNING_SECRET")
-	if signingSecret == "" {
-		return nil, ErrInvalidSigningSecret
-	}
-
+func NewPasetoManager(signingSecret string) (p *PasetoManager, err error) {
 	secretKey, err := paseto.NewV4AsymmetricSecretKeyFromHex(signingSecret)
 	if err != nil {
 		return nil, ErrInvalidSigningSecret
 	}
-	publicKey, err := paseto.NewV4AsymmetricPublicKeyFromHex(signingSecret)
-	if err != nil {
-		return nil, ErrInvalidSigningSecret
-	}
+	publicKey := secretKey.Public()
 
-	// TODO: Validate for paseto.ValidAt (does time.Now() snapshot the time to parser creation?)
 	parser := paseto.NewParser()
 	parser.AddRule(paseto.NotExpired())
+	parser.AddRule(paseto.NotBeforeNbf())
 	parser.AddRule(paseto.ForAudience(PASETO_AUDIENCE))
 	parser.AddRule(paseto.IssuedBy(PASETO_ISSUED_BY))
 	parser.AddRule(paseto.Subject(PASETO_SUBJECT))
