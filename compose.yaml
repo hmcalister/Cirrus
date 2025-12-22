@@ -61,7 +61,7 @@ services:
       - test
 
   database-container:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     # For debug purpose only, no need to expose the database in production
     # ports:
     #   - "127.0.0.1:5432:5432"
