@@ -170,6 +170,12 @@ func (oauth2Strategy *OAuth2AuthenticationStrategy) handleCallback(w http.Respon
 		return
 	}
 
+	// Validate the user email (effectively the OAuth2 provider has vouched)
+	txQueries.SetUserValidatedStatus(ctx, database.SetUserValidatedStatusParams{
+		Email:     oauthUserInfo.Email,
+		Validated: true,
+	})
+
 	// Create or verify OAuth2 authentication link
 	// Try to get existing OAuth2 auth
 	_, err = txQueries.GetOAuth2Authentication(ctx, database.GetOAuth2AuthenticationParams{
