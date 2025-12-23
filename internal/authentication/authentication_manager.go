@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/hmcalister/LiteralCloudService/internal/authentication/authstrategy"
+	"github.com/hmcalister/LiteralCloudService/internal/authentication/emailvalidator"
 	"github.com/hmcalister/LiteralCloudService/internal/authentication/token"
 	"github.com/hmcalister/LiteralCloudService/internal/database"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,6 +25,7 @@ type AuthenticationManager struct {
 	connPool                *pgxpool.Pool
 	authTokenManager        token.AuthTokenManager
 	strategies              map[string]authstrategy.AuthenticationStrategy
+	emailValidator          *emailvalidator.EmailValidator
 	authenticationSubrouter *http.ServeMux
 }
 
@@ -32,13 +34,23 @@ func NewAuthenticationManager(
 	connPool *pgxpool.Pool,
 	authTokenManager token.AuthTokenManager,
 ) *AuthenticationManager {
-	return &AuthenticationManager{
+	emailValidator := emailvalidator.NewEmailValidator(db, connPool, authTokenManager)
+
+	am := &AuthenticationManager{
 		strategies:              make(map[string]authstrategy.AuthenticationStrategy),
 		db:                      db,
 		connPool:                connPool,
 		authTokenManager:        authTokenManager,
+		emailValidator:          emailValidator,
 		authenticationSubrouter: http.NewServeMux(),
 	}
+
+	am.authenticationSubrouter.Handle(
+		"/validate_email/",
+		http.StripPrefix("/validate_email", emailValidator.GetRouter()),
+	)
+
+	return am
 }
 
 // This subrouter must be mounted to `/auth`
@@ -46,6 +58,7 @@ func NewAuthenticationManager(
 //
 // For example, password auth would make requests to `/auth/password`
 // OAuth2 with Google would make requests to `/auth/oauth2_google` and callback `/auth/oauth2_google/callback`
+// Email validation requests should be made to `/auth/validate_email/{code}`
 func (am *AuthenticationManager) GetAuthenticationSubrouter() *http.ServeMux {
 	return am.authenticationSubrouter
 }
