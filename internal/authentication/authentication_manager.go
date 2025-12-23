@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/hmcalister/LiteralCloudService/internal/authentication/authstrategy"
-	"github.com/hmcalister/LiteralCloudService/internal/authentication/emailvalidator"
 	"github.com/hmcalister/LiteralCloudService/internal/authentication/token"
 	"github.com/hmcalister/LiteralCloudService/internal/database"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,7 +24,6 @@ type AuthenticationManager struct {
 	connPool                *pgxpool.Pool
 	authTokenManager        token.AuthTokenManager
 	strategies              map[string]authstrategy.AuthenticationStrategy
-	emailValidator          *emailvalidator.EmailValidator
 	authenticationSubrouter *http.ServeMux
 }
 
@@ -34,21 +32,13 @@ func NewAuthenticationManager(
 	connPool *pgxpool.Pool,
 	authTokenManager token.AuthTokenManager,
 ) *AuthenticationManager {
-	emailValidator := emailvalidator.NewEmailValidator(db, connPool, authTokenManager)
-
 	am := &AuthenticationManager{
 		strategies:              make(map[string]authstrategy.AuthenticationStrategy),
 		db:                      db,
 		connPool:                connPool,
 		authTokenManager:        authTokenManager,
-		emailValidator:          emailValidator,
 		authenticationSubrouter: http.NewServeMux(),
 	}
-
-	am.authenticationSubrouter.Handle(
-		"/validate_email/",
-		http.StripPrefix("/validate_email", emailValidator.GetRouter()),
-	)
 
 	return am
 }
