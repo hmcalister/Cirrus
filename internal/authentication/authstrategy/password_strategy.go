@@ -25,6 +25,8 @@ type PasswordAuthenticationStrategy struct {
 	*baseAuthenticationStrategy
 }
 
+// Currently, the password strategy does not validate the user has access to the given email address.
+// For this reason, it should not be used.
 func NewPasswordStrategy() PasswordAuthenticationStrategy {
 	passwordStrategy := PasswordAuthenticationStrategy{
 		baseAuthenticationStrategy: newBaseAuthenticationStrategy(),
