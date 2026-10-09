@@ -42,7 +42,7 @@ func run() error {
 	}
 	defer pool.Close()
 
-	emailSender, err := email.NewPurelyMail(email.PurelyMailConfig{
+	emailSender, err := email.NewSMTPSender(email.SMTPConfig{
 		Host:        cfg.Email.Host,
 		Port:        cfg.Email.Port,
 		Username:    cfg.Email.Username,

@@ -27,9 +27,9 @@ func (m *mockMailer) deliver(_ context.Context, params mailerDeliverParams) erro
 	return m.err
 }
 
-func newTestSender(t *testing.T, m *mockMailer) *PurelyMailSender {
+func newTestSender(t *testing.T, m *mockMailer) *SMTPSender {
 	t.Helper()
-	sender, err := NewPurelyMail(PurelyMailConfig{
+	sender, err := NewSMTPSender(SMTPConfig{
 		Host:        "smtp.example.com",
 		Port:        "465",
 		Username:    "user",
