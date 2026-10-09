@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/hmcalister/LiteralCloudService/internal/database"
-	"github.com/hmcalister/LiteralCloudService/internal/email"
+	"github.com/hmcalister/Cirrus/internal/database"
+	"github.com/hmcalister/Cirrus/internal/email"
 )
 
 // Server holds the dependencies shared by the handlers.

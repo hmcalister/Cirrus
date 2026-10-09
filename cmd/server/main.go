@@ -9,12 +9,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/hmcalister/LiteralCloudService/internal/api"
-	"github.com/hmcalister/LiteralCloudService/internal/config"
-	"github.com/hmcalister/LiteralCloudService/internal/database"
-	"github.com/hmcalister/LiteralCloudService/internal/email"
-	"github.com/hmcalister/LiteralCloudService/internal/logging"
-	"github.com/hmcalister/LiteralCloudService/internal/postgres"
+	"github.com/hmcalister/Cirrus/internal/api"
+	"github.com/hmcalister/Cirrus/internal/config"
+	"github.com/hmcalister/Cirrus/internal/database"
+	"github.com/hmcalister/Cirrus/internal/email"
+	"github.com/hmcalister/Cirrus/internal/logging"
+	"github.com/hmcalister/Cirrus/internal/postgres"
 )
 
 func main() {
