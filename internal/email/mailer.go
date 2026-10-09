@@ -41,17 +41,17 @@ func (smtpMailer) deliver(ctx context.Context, params mailerDeliverParams) error
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrConnection, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// net/smtp has no context support, so closing the connection unblocks its I/O.
-	stop := context.AfterFunc(ctx, func() { conn.Close() })
+	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
 
 	client, err := smtp.NewClient(conn, params.host)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrConnection, err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	if err := client.Auth(smtp.PlainAuth("", params.username, params.password, params.host)); err != nil {
 		return fmt.Errorf("%w: %w", ErrAuthentication, err)
@@ -75,8 +75,9 @@ func (smtpMailer) deliver(ctx context.Context, params mailerDeliverParams) error
 
 	if len(accepted) == 0 {
 		// Nothing to deliver
-		client.Quit()
-		return errors.Join(recipientErrs...)
+		err := client.Quit()
+		joinedRecipientErrs := errors.Join(recipientErrs...)
+		return errors.Join(err, joinedRecipientErrs)
 	}
 
 	w, err := client.Data()
@@ -91,10 +92,11 @@ func (smtpMailer) deliver(ctx context.Context, params mailerDeliverParams) error
 	}
 
 	// The message is already accepted, so a failing QUIT is irrelevant.
-	client.Quit()
-
-	if len(recipientErrs) > 0 {
-		return errors.Join(recipientErrs...)
+	err = client.Quit()
+	if len(recipientErrs) > 0 || err != nil {
+		joinedRecipientErrs := errors.Join(recipientErrs...)
+		return errors.Join(err, joinedRecipientErrs)
 	}
+
 	return nil
 }
