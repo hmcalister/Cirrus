@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// PurelyMailConfig configures a PurelyMailSender.
-type PurelyMailConfig struct {
+// SMTPConfig configures a SMTPSender.
+type SMTPConfig struct {
 	Host        string
 	Port        string
 	Username    string
@@ -17,7 +17,7 @@ type PurelyMailConfig struct {
 	Timeout     time.Duration
 }
 
-type PurelyMailSender struct {
+type SMTPSender struct {
 	host        string
 	port        string
 	username    string
@@ -28,19 +28,19 @@ type PurelyMailSender struct {
 	mailer      mailer
 }
 
-// NewPurelyMail creates a sender from cfg. No connection is made until Send is called.
+// Create a new SMTPSender from cfg. No connection is made until Send is called.
 //
 // Host, Port, and FromAddress are required and must be non-empty; a missing
 // value is a programming error and panics.
-func NewPurelyMail(cfg PurelyMailConfig) (*PurelyMailSender, error) {
+func NewSMTPSender(cfg SMTPConfig) (*SMTPSender, error) {
 	if cfg.Host == "" {
-		panic("email: PurelyMailConfig.Host must not be empty")
+		panic("email: SMTPConfig.Host must not be empty")
 	}
 	if cfg.Port == "" {
-		panic("email: PurelyMailConfig.Port must not be empty")
+		panic("email: SMTPConfig.Port must not be empty")
 	}
 	if cfg.FromAddress == "" {
-		panic("email: PurelyMailConfig.FromAddress must not be empty")
+		panic("email: SMTPConfig.FromAddress must not be empty")
 	}
 
 	addr, err := parseAddress(cfg.FromAddress)
@@ -48,7 +48,7 @@ func NewPurelyMail(cfg PurelyMailConfig) (*PurelyMailSender, error) {
 		return nil, fmt.Errorf("email: invalid from address %q: %w", cfg.FromAddress, err)
 	}
 
-	return &PurelyMailSender{
+	return &SMTPSender{
 		host:        cfg.Host,
 		port:        cfg.Port,
 		username:    cfg.Username,
@@ -64,7 +64,7 @@ func NewPurelyMail(cfg PurelyMailConfig) (*PurelyMailSender, error) {
 //
 // Invalid input is rejected before any network activity.
 // A cancelled or expired context is reported as the context's error.
-func (s *PurelyMailSender) Send(ctx context.Context, msg Message, recipients []string) error {
+func (s *SMTPSender) Send(ctx context.Context, msg Message, recipients []string) error {
 	if err := validateMessage(msg); err != nil {
 		return err
 	}
