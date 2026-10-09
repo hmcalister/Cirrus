@@ -1,0 +1,74 @@
+name: CICD Pipeline
+
+on:
+  push:
+  workflow_dispatch:
+
+env:
+  SQLC_VERSION: "1.30.0"
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sqlc-dev/setup-sqlc@v4
+        with:
+          sqlc-version: ${{ env.SQLC_VERSION }}
+      - run: sqlc generate -f sqlc/sqlc.yaml
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: go-compose-template:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: sqlc-dev/setup-sqlc@v4
+        with:
+          sqlc-version: ${{ env.SQLC_VERSION }}
+      - run: sqlc generate -f sqlc/sqlc.yaml
+
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+
+      - run: go vet ./...
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: sqlc-dev/setup-sqlc@v4
+        with:
+          sqlc-version: ${{ env.SQLC_VERSION }}
+      - run: sqlc generate -f sqlc/sqlc.yaml
+
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - run: go build ./...
+      - run: go test -race ./...
