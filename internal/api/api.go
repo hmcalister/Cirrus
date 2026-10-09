@@ -8,16 +8,18 @@ import (
 	"strconv"
 
 	"github.com/hmcalister/LiteralCloudService/internal/database"
+	"github.com/hmcalister/LiteralCloudService/internal/email"
 )
 
 // Server holds the dependencies shared by the handlers.
 // Handlers are methods so they can be tested with httptest and a fake Querier.
 type Server struct {
 	queries database.Querier
+	email   email.Sender
 }
 
-func NewServer(queries database.Querier) *Server {
-	return &Server{queries: queries}
+func NewServer(queries database.Querier, emailSender email.Sender) *Server {
+	return &Server{queries: queries, email: emailSender}
 }
 
 func (s *Server) Routes() http.Handler {

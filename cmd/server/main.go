@@ -12,6 +12,7 @@ import (
 	"github.com/hmcalister/LiteralCloudService/internal/api"
 	"github.com/hmcalister/LiteralCloudService/internal/config"
 	"github.com/hmcalister/LiteralCloudService/internal/database"
+	"github.com/hmcalister/LiteralCloudService/internal/email"
 	"github.com/hmcalister/LiteralCloudService/internal/logging"
 	"github.com/hmcalister/LiteralCloudService/internal/postgres"
 )
@@ -35,24 +36,36 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := postgres.Connect(ctx, cfg.DatabaseURL, cfg)
+	pool, err := postgres.Connect(ctx, cfg.Database)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
+	emailSender, err := email.NewPurelyMail(email.PurelyMailConfig{
+		Host:        cfg.Email.Host,
+		Port:        cfg.Email.Port,
+		Username:    cfg.Email.Username,
+		Password:    cfg.Email.Password,
+		FromAddress: cfg.Email.FromAddress,
+		FromName:    cfg.Email.FromName,
+		Timeout:     cfg.Email.Timeout,
+	})
+	if err != nil {
+		return err
+	}
 	server := &http.Server{
-		Addr:              cfg.Addr,
-		Handler:           api.NewServer(database.New(pool)).Routes(),
-		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
-		ReadTimeout:       cfg.ReadTimeout,
-		WriteTimeout:      cfg.WriteTimeout,
-		IdleTimeout:       cfg.IdleTimeout,
+		Addr:              cfg.Server.Addr,
+		Handler:           api.NewServer(database.New(pool), emailSender).Routes(),
+		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
+		ReadTimeout:       cfg.Server.ReadTimeout,
+		WriteTimeout:      cfg.Server.WriteTimeout,
+		IdleTimeout:       cfg.Server.IdleTimeout,
 	}
 
 	serveErr := make(chan error, 1)
 	go func() {
-		slog.Info("ready to serve", "addr", cfg.Addr)
+		slog.Info("ready to serve", "addr", cfg.Server.Addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serveErr <- err
 		}
@@ -65,7 +78,7 @@ func run() error {
 		slog.Info("shutdown signal received")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()
 	return server.Shutdown(shutdownCtx)
 }
