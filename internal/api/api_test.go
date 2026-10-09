@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hmcalister/LiteralCloudService/internal/database"
-	"github.com/hmcalister/LiteralCloudService/internal/email"
+	"github.com/hmcalister/Cirrus/internal/database"
+	"github.com/hmcalister/Cirrus/internal/email"
 )
 
 // fakeQuerier implements database.Querier, so handlers can be tested without a

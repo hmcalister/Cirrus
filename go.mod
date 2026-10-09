@@ -1,4 +1,4 @@
-module github.com/hmcalister/LiteralCloudService
+module github.com/hmcalister/Cirrus
 
 go 1.27.0
 
