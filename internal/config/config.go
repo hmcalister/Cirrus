@@ -10,20 +10,39 @@ import (
 	"time"
 )
 
-type Config struct {
-	Addr              string
+type DatabaseConfig struct {
 	DatabaseURL       string
-	Debug             bool
-	ReadHeaderTimeout time.Duration
-	ReadTimeout       time.Duration
-	WriteTimeout      time.Duration
-	IdleTimeout       time.Duration
-	ShutdownTimeout   time.Duration
 	MaxConns          int32
 	MinConns          int32
 	MaxConnLifetime   time.Duration
 	MaxConnIdleTime   time.Duration
 	HealthCheckPeriod time.Duration
+}
+
+type ServerConfig struct {
+	Addr              string
+	ReadHeaderTimeout time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
+	ShutdownTimeout   time.Duration
+}
+
+type EmailConfig struct {
+	Host        string
+	Port        string
+	Username    string
+	Password    string
+	FromAddress string
+	FromName    string
+	Timeout     time.Duration
+}
+
+type Config struct {
+	Server   ServerConfig
+	Database DatabaseConfig
+	Email    EmailConfig
+	Debug    bool
 }
 
 func Load() (Config, error) {
@@ -35,19 +54,32 @@ func Load() (Config, error) {
 	}
 
 	return Config{
-		Addr:              getRequiredEnv("HTTP_ADDR"),
-		DatabaseURL:       dsn.String(),
-		Debug:             os.Getenv("DEBUG") != "",
-		ReadHeaderTimeout: toDurationStrict(getRequiredEnv("HTTP_READ_HEADER_TIMEOUT")),
-		ReadTimeout:       toDurationStrict(getRequiredEnv("HTTP_READ_TIMEOUT")),
-		WriteTimeout:      toDurationStrict(getRequiredEnv("HTTP_WRITE_TIMEOUT")),
-		IdleTimeout:       toDurationStrict(getRequiredEnv("HTTP_IDLE_TIMEOUT")),
-		ShutdownTimeout:   toDurationStrict(getRequiredEnv("HTTP_SHUTDOWN_TIMEOUT")),
-		MaxConns:          toInt32Strict(getRequiredEnv("DB_MAX_CONNS")),
-		MinConns:          toInt32Strict(getRequiredEnv("DB_MIN_CONNS")),
-		MaxConnLifetime:   toDurationStrict(getRequiredEnv("DB_MAX_CONN_LIFETIME")),
-		MaxConnIdleTime:   toDurationStrict(getRequiredEnv("DB_MAX_CONN_IDLE_TIME")),
-		HealthCheckPeriod: toDurationStrict(getRequiredEnv("DB_HEALTH_CHECK_PERIOD")),
+		Server: ServerConfig{
+			Addr:              getRequiredEnv("HTTP_ADDR"),
+			ReadHeaderTimeout: toDurationStrict(getRequiredEnv("HTTP_READ_HEADER_TIMEOUT")),
+			ReadTimeout:       toDurationStrict(getRequiredEnv("HTTP_READ_TIMEOUT")),
+			WriteTimeout:      toDurationStrict(getRequiredEnv("HTTP_WRITE_TIMEOUT")),
+			IdleTimeout:       toDurationStrict(getRequiredEnv("HTTP_IDLE_TIMEOUT")),
+			ShutdownTimeout:   toDurationStrict(getRequiredEnv("HTTP_SHUTDOWN_TIMEOUT")),
+		},
+		Database: DatabaseConfig{
+			DatabaseURL:       dsn.String(),
+			MaxConns:          toInt32Strict(getRequiredEnv("DB_MAX_CONNS")),
+			MinConns:          toInt32Strict(getRequiredEnv("DB_MIN_CONNS")),
+			MaxConnLifetime:   toDurationStrict(getRequiredEnv("DB_MAX_CONN_LIFETIME")),
+			MaxConnIdleTime:   toDurationStrict(getRequiredEnv("DB_MAX_CONN_IDLE_TIME")),
+			HealthCheckPeriod: toDurationStrict(getRequiredEnv("DB_HEALTH_CHECK_PERIOD")),
+		},
+		Email: EmailConfig{
+			Host:        getRequiredEnv("EMAIL_SMTP_HOST"),
+			Port:        getRequiredEnv("EMAIL_SMTP_PORT"),
+			Username:    getRequiredEnv("EMAIL_SMTP_USERNAME"),
+			Password:    getRequiredEnv("EMAIL_SMTP_PASSWORD"),
+			FromAddress: getRequiredEnv("EMAIL_FROM_ADDRESS"),
+			FromName:    getRequiredEnv("EMAIL_FROM_NAME"),
+			Timeout:     toDurationStrict(getRequiredEnv("EMAIL_SMTP_TIMEOUT")),
+		},
+		Debug: os.Getenv("DEBUG") != "",
 	}, nil
 }
 

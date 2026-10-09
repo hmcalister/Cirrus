@@ -16,8 +16,8 @@ import (
 // A pool is used rather than a single pgx.Conn because a pgx.Conn is not safe for concurrent use.
 //
 // The caller is responsible for calling Close on the returned pool.
-func Connect(ctx context.Context, databaseURL string, cfg config.Config) (*pgxpool.Pool, error) {
-	poolCfg, err := pgxpool.ParseConfig(databaseURL)
+func Connect(ctx context.Context, cfg config.DatabaseConfig) (*pgxpool.Pool, error) {
+	poolCfg, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parsing database url: %w", err)
 	}

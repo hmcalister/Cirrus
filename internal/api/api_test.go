@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/hmcalister/LiteralCloudService/internal/database"
+	"github.com/hmcalister/LiteralCloudService/internal/email"
 )
 
 // fakeQuerier implements database.Querier, so handlers can be tested without a
@@ -37,9 +38,14 @@ func (f fakeQuerier) GetAuthor(_ context.Context, id int64) (database.Author, er
 func doRequest(t *testing.T, q database.Querier, method, target string) *httptest.ResponseRecorder {
 	t.Helper()
 	w := httptest.NewRecorder()
-	NewServer(q).Routes().ServeHTTP(w, httptest.NewRequest(method, target, nil))
+	NewServer(q, mockSender{}).Routes().ServeHTTP(w, httptest.NewRequest(method, target, nil))
 	return w
 }
+
+// Mocks email.Sender
+type mockSender struct{}
+
+func (mockSender) Send(context.Context, email.Message, []string) error { return nil }
 
 func TestHandleCreateAuthor(t *testing.T) {
 	var got database.CreateAuthorParams
