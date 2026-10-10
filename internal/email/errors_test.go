@@ -53,7 +53,7 @@ func TestRecipientErrorInJoin(t *testing.T) {
 
 func TestWrapSMTPErrorDelivery(t *testing.T) {
 	// A server response is a delivery failure.
-	err := wrapSMTPError(&textproto.Error{Code: 550, Msg: "mailbox unavailable"})
+	err := WrapSMTPError(&textproto.Error{Code: 550, Msg: "mailbox unavailable"})
 
 	if !errors.Is(err, ErrDelivery) {
 		t.Errorf("err = %v, want ErrDelivery", err)
@@ -65,7 +65,7 @@ func TestWrapSMTPErrorDelivery(t *testing.T) {
 
 func TestWrapSMTPErrorConnection(t *testing.T) {
 	// A non-protocol error is a connection failure.
-	err := wrapSMTPError(fmt.Errorf("broken pipe"))
+	err := WrapSMTPError(fmt.Errorf("broken pipe"))
 
 	if !errors.Is(err, ErrConnection) {
 		t.Errorf("err = %v, want ErrConnection", err)
@@ -77,7 +77,7 @@ func TestWrapSMTPErrorConnection(t *testing.T) {
 
 func TestWrapSMTPErrorPreservesCause(t *testing.T) {
 	original := &textproto.Error{Code: 550, Msg: "mailbox unavailable"}
-	err := wrapSMTPError(original)
+	err := WrapSMTPError(original)
 
 	var smtpErr *textproto.Error
 	if !errors.As(err, &smtpErr) {

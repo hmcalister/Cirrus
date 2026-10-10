@@ -8,17 +8,17 @@ import (
 	"strconv"
 
 	"github.com/hmcalister/Cirrus/internal/database"
-	"github.com/hmcalister/Cirrus/internal/email"
+	"github.com/hmcalister/Cirrus/internal/email/sender"
 )
 
 // Server holds the dependencies shared by the handlers.
 // Handlers are methods so they can be tested with httptest and a fake Querier.
 type Server struct {
 	queries database.Querier
-	email   email.Sender
+	email   sender.Sender
 }
 
-func NewServer(queries database.Querier, emailSender email.Sender) *Server {
+func NewServer(queries database.Querier, emailSender sender.Sender) *Server {
 	return &Server{queries: queries, email: emailSender}
 }
 
