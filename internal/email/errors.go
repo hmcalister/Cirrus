@@ -9,6 +9,8 @@ import (
 var (
 	// Message is unusable (e.g. no subject or body).
 	ErrInvalidMessage = errors.New("email: invalid message")
+	// An attachment is larger than the allowed limit.
+	ErrAttachmentTooLarge = errors.New("email: attachment too large")
 	// Recipient is empty or not a valid address.
 	ErrInvalidRecipient = errors.New("email: invalid recipient")
 	// The recipient list was empty.
@@ -40,7 +42,7 @@ func (e *RecipientError) Unwrap() error {
 // wrapSMTPError classifies an SMTP protocol error: a server response is a
 // delivery failure, while any other error (e.g. a broken connection) is a
 // connection failure.
-func wrapSMTPError(err error) error {
+func WrapSMTPError(err error) error {
 	var smtpErr *textproto.Error
 	if errors.As(err, &smtpErr) {
 		return fmt.Errorf("%w: %w", ErrDelivery, err)
