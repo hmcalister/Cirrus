@@ -3,6 +3,7 @@ package email
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -47,19 +48,21 @@ func ValidateAttachment(att Attachment) error {
 }
 
 // Check a recipients list. Returns the bare addresses (display names stripped), or an error if any are invalid.
-func ValidateRecipients(recipients []string) ([]string, error) {
-	if len(recipients) == 0 {
-		return nil, ErrNoRecipients
+func ValidateRecipients(recipients Recipients) error {
+	if len(recipients.ToRecipients) == 0 {
+		return ErrNoToRecipients
 	}
 
-	addrs := make([]string, 0, len(recipients))
-	for _, r := range recipients {
-		addr, err := ParseAddress(r)
+	for _, r := range slices.Concat(
+		recipients.ToRecipients,
+		recipients.CCRecipients,
+		recipients.BCCRecipients,
+	) {
+		_, err := ParseAddress(r)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %q: %w", ErrInvalidRecipient, r, err)
+			return fmt.Errorf("%w: %q: %w", ErrInvalidRecipient, r, err)
 		}
-		addrs = append(addrs, addr)
 	}
 
-	return addrs, nil
+	return nil
 }
