@@ -1,5 +1,12 @@
 package email
 
+// Recipients of all forms
+type Recipients struct {
+	ToRecipients  []string
+	CCRecipients  []string
+	BCCRecipients []string
+}
+
 // Message contains the content of an email.
 type Message struct {
 	// Subject line of the email.
