@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+
+	"github.com/hmcalister/Cirrus/internal/email"
 )
 
 // tlsConfig returns the TLS configuration used for every connection.
@@ -51,7 +53,36 @@ type Mailer interface {
 
 type MailerDeliverParams struct {
 	ServerAuth
-	From       string
-	Recipients []string
-	Body       []byte
+	// Get using email.ValidateRecipients and mailer.EnvelopeRecipients
+	AllRecipients []string
+	From          string
+	Body          []byte
+}
+
+// Return every recipient as a single, de-duplicated list. For SMTP envelope (RCPT TO).
+//
+// Addresses are assumed to be validated; any that fail to parse are skipped.
+func EnvelopeRecipients(r email.Recipients) []string {
+	total := len(r.ToRecipients) + len(r.CCRecipients) + len(r.BCCRecipients)
+	if total == 0 {
+		return nil
+	}
+
+	seen := make(map[string]struct{}, total)
+	addrs := make([]string, 0, total)
+	for _, group := range [][]string{r.ToRecipients, r.CCRecipients, r.BCCRecipients} {
+		for _, raw := range group {
+			addr, err := email.ParseAddress(raw)
+			if err != nil {
+				continue
+			}
+			if _, ok := seen[addr]; ok {
+				continue
+			}
+			seen[addr] = struct{}{}
+			addrs = append(addrs, addr)
+		}
+	}
+
+	return addrs
 }

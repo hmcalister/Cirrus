@@ -40,12 +40,9 @@ func (SMTPMailer) Deliver(ctx context.Context, params MailerDeliverParams) error
 		return email.WrapSMTPError(err)
 	}
 
-	// RCPT TO is attempted for every recipient so that a single rejected address
-	// does not prevent delivery to the others. Accepted recipients continue; any
-	// rejection is collected and reported after the send attempt.
 	var accepted []string
 	var recipientErrs []error
-	for _, rcpt := range params.Recipients {
+	for _, rcpt := range params.AllRecipients {
 		if err := client.Rcpt(rcpt); err != nil {
 			recipientErrs = append(recipientErrs, &email.RecipientError{Recipient: rcpt, Err: email.WrapSMTPError(err)})
 			continue
