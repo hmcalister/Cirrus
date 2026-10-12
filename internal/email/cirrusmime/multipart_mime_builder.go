@@ -13,11 +13,11 @@ import (
 	"github.com/hmcalister/Cirrus/internal/email"
 )
 
-var _ emailBuilder = multipartBuilder{}
+var _ mimeBuilder = multipartMimeBuilder{}
 
-type multipartBuilder struct{}
+type multipartMimeBuilder struct{}
 
-func (builder multipartBuilder) buildEmail(commonHeaders []string, msg email.Message) ([]byte, error) {
+func (builder multipartMimeBuilder) buildEmail(commonHeaders []string, msg email.Message) ([]byte, error) {
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
 
