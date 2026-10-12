@@ -11,6 +11,8 @@ import (
 	"github.com/hmcalister/Cirrus/internal/email/mailer"
 )
 
+var _ Sender = SMTPSender{}
+
 type SMTPConfig struct {
 	mailer.ServerAuth
 	FromAddress string
@@ -54,15 +56,18 @@ func NewSMTPSender(cfg SMTPConfig) *SMTPSender {
 //
 // Invalid input is rejected before any network activity.
 // A cancelled or expired context is reported as the context's error.
-func (s *SMTPSender) Send(ctx context.Context, msg email.Message, recipients []string) error {
-	if err := email.ValidateMessage(msg); err != nil {
-		return err
-	}
-	addrs, err := email.ValidateRecipients(recipients)
+func (s SMTPSender) Send(ctx context.Context, sendParams SendParams) error {
+	err := email.ValidateMessage(sendParams.Message)
 	if err != nil {
 		return err
 	}
-	body, err := cirrusmime.BuildMIMEMessage(s.fromAddress, msg)
+
+	err = email.ValidateRecipients(sendParams.Recipients)
+	if err != nil {
+		return err
+	}
+
+	body, err := cirrusmime.BuildMIMEMessage(s.fromAddress, sendParams.Recipients, sendParams.Message)
 	if err != nil {
 		return err
 	}
@@ -74,9 +79,9 @@ func (s *SMTPSender) Send(ctx context.Context, msg email.Message, recipients []s
 	}
 
 	return s.mailer.Deliver(ctx, mailer.MailerDeliverParams{
-		ServerAuth: s.ServerAuth,
-		From:       s.fromAddress.Address,
-		Recipients: addrs,
-		Body:       body,
+		ServerAuth:    s.ServerAuth,
+		From:          s.fromAddress.Address,
+		AllRecipients: mailer.EnvelopeRecipients(sendParams.Recipients),
+		Body:          body,
 	})
 }
