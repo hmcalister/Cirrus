@@ -17,7 +17,7 @@ var _ Mailer = SMTPMailer{}
 type SMTPMailer struct{}
 
 func (SMTPMailer) Deliver(ctx context.Context, params MailerDeliverParams) error {
-	conn, err := (&tls.Dialer{Config: tlsConfig(params.ServerAuth.Host)}).DialContext(ctx, "tcp", net.JoinHostPort(params.ServerAuth.Host, params.ServerAuth.Port))
+	conn, err := (&tls.Dialer{Config: tlsConfig(params.ServerAuth.host)}).DialContext(ctx, "tcp", net.JoinHostPort(params.ServerAuth.host, params.ServerAuth.port))
 	if err != nil {
 		return fmt.Errorf("%w: %w", email.ErrConnection, err)
 	}
@@ -27,13 +27,13 @@ func (SMTPMailer) Deliver(ctx context.Context, params MailerDeliverParams) error
 	stop := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stop()
 
-	client, err := smtp.NewClient(conn, params.ServerAuth.Host)
+	client, err := smtp.NewClient(conn, params.ServerAuth.host)
 	if err != nil {
 		return fmt.Errorf("%w: %w", email.ErrConnection, err)
 	}
 	defer func() { _ = client.Close() }()
 
-	if err := client.Auth(smtp.PlainAuth("", params.ServerAuth.Username, params.ServerAuth.Password, params.ServerAuth.Host)); err != nil {
+	if err := client.Auth(smtp.PlainAuth("", params.ServerAuth.username, params.ServerAuth.password, params.ServerAuth.host)); err != nil {
 		return fmt.Errorf("%w: %w", email.ErrAuthentication, err)
 	}
 	if err := client.Mail(params.From); err != nil {

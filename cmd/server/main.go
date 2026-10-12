@@ -12,7 +12,7 @@ import (
 	"github.com/hmcalister/Cirrus/internal/api"
 	"github.com/hmcalister/Cirrus/internal/config"
 	"github.com/hmcalister/Cirrus/internal/database"
-	"github.com/hmcalister/Cirrus/internal/email"
+	"github.com/hmcalister/Cirrus/internal/email/mailer"
 	"github.com/hmcalister/Cirrus/internal/email/sender"
 	"github.com/hmcalister/Cirrus/internal/logging"
 	"github.com/hmcalister/Cirrus/internal/postgres"
@@ -43,20 +43,23 @@ func run() error {
 	}
 	defer pool.Close()
 
+	mailerServerAuth, err := mailer.NewServerAuth(
+		cfg.Email.Host,
+		cfg.Email.Port,
+		cfg.Email.Username,
+		cfg.Email.Password,
+	)
+	if err != nil {
+		return err
+	}
+
 	emailSender := sender.NewSMTPSender(sender.SMTPConfig{
-		ServerAuth: email.ServerAuth{
-			Host:     cfg.Email.Host,
-			Port:     cfg.Email.Port,
-			Username: cfg.Email.Username,
-			Password: cfg.Email.Password,
-		},
+		ServerAuth:  mailerServerAuth,
 		FromAddress: cfg.Email.FromAddress,
 		FromName:    cfg.Email.FromName,
 		Timeout:     cfg.Email.Timeout,
 	})
-	if err != nil {
-		return err
-	}
+
 	server := &http.Server{
 		Addr:              cfg.Server.Addr,
 		Handler:           api.NewServer(database.New(pool), emailSender).Routes(),

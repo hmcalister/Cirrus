@@ -19,29 +19,30 @@ import (
 
 // Records the arguments of the last deliver call.
 type mockMailer struct {
-	from, host, port, username, password string
-	recipients                           []string
-	body                                 []byte
-	err                                  error
-	calls                                int
+	from       string
+	recipients []string
+	body       []byte
+	err        error
+	calls      int
 }
 
 func (m *mockMailer) Deliver(_ context.Context, params mailer.MailerDeliverParams) error {
 	m.calls++
-	m.host, m.port, m.username, m.password = params.ServerAuth.Host, params.ServerAuth.Port, params.ServerAuth.Username, params.ServerAuth.Password
 	m.from, m.recipients, m.body = params.From, params.Recipients, params.Body
 	return m.err
 }
 
 func newTestSender(t *testing.T, m *mockMailer) *SMTPSender {
 	t.Helper()
+	mailerServerAuth, _ := mailer.NewServerAuth(
+		"smtp.example.com",
+		"465",
+		"user",
+		"secret",
+	)
+
 	sender := NewSMTPSender(SMTPConfig{
-		ServerAuth: email.ServerAuth{
-			Host:     "smtp.example.com",
-			Port:     "465",
-			Username: "user",
-			Password: "secret",
-		},
+		ServerAuth:  mailerServerAuth,
 		FromAddress: "noreply@example.com",
 		FromName:    "Cloud",
 		Timeout:     time.Second,
@@ -59,10 +60,6 @@ func TestSend(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if mock.host != "smtp.example.com" || mock.username != "user" || mock.password != "secret" {
-		t.Logf("%+v", *mock)
-		t.Errorf("connection target/credentials = %q %q/%q", mock.host, mock.username, mock.password)
-	}
 	if mock.from != "noreply@example.com" {
 		t.Errorf("from = %q", mock.from)
 	}

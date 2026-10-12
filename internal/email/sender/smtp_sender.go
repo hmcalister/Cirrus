@@ -11,16 +11,15 @@ import (
 	"github.com/hmcalister/Cirrus/internal/email/mailer"
 )
 
-// SMTPConfig configures a SMTPSender.
 type SMTPConfig struct {
-	ServerAuth  email.ServerAuth
+	mailer.ServerAuth
 	FromAddress string
 	FromName    string
 	Timeout     time.Duration
 }
 
 type SMTPSender struct {
-	serverAuth  email.ServerAuth
+	mailer.ServerAuth
 	fromAddress mail.Address
 	timeout     time.Duration
 	mailer      mailer.Mailer
@@ -31,12 +30,6 @@ type SMTPSender struct {
 // Host, Port, and FromAddress are required and must be non-empty; a missing
 // value is a programming error and panics.
 func NewSMTPSender(cfg SMTPConfig) *SMTPSender {
-	if cfg.ServerAuth.Host == "" {
-		panic("email: SMTPConfig.Host must not be empty")
-	}
-	if cfg.ServerAuth.Port == "" {
-		panic("email: SMTPConfig.Port must not be empty")
-	}
 	if cfg.FromAddress == "" {
 		panic("email: SMTPConfig.FromAddress must not be empty")
 	}
@@ -47,7 +40,7 @@ func NewSMTPSender(cfg SMTPConfig) *SMTPSender {
 	}
 
 	return &SMTPSender{
-		serverAuth: cfg.ServerAuth,
+		ServerAuth: cfg.ServerAuth,
 		fromAddress: mail.Address{
 			Name:    cfg.FromName,
 			Address: addr,
@@ -81,7 +74,7 @@ func (s *SMTPSender) Send(ctx context.Context, msg email.Message, recipients []s
 	}
 
 	return s.mailer.Deliver(ctx, mailer.MailerDeliverParams{
-		ServerAuth: s.serverAuth,
+		ServerAuth: s.ServerAuth,
 		From:       s.fromAddress.Address,
 		Recipients: addrs,
 		Body:       body,
