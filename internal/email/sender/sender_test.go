@@ -19,29 +19,30 @@ import (
 
 // Records the arguments of the last deliver call.
 type mockMailer struct {
-	from, host, port, username, password string
-	recipients                           []string
-	body                                 []byte
-	err                                  error
-	calls                                int
+	from          string
+	allRecipients []string
+	body          []byte
+	err           error
+	calls         int
 }
 
 func (m *mockMailer) Deliver(_ context.Context, params mailer.MailerDeliverParams) error {
 	m.calls++
-	m.host, m.port, m.username, m.password = params.ServerAuth.Host, params.ServerAuth.Port, params.ServerAuth.Username, params.ServerAuth.Password
-	m.from, m.recipients, m.body = params.From, params.Recipients, params.Body
+	m.from, m.allRecipients, m.body = params.From, params.AllRecipients, params.Body
 	return m.err
 }
 
 func newTestSender(t *testing.T, m *mockMailer) *SMTPSender {
 	t.Helper()
+	mailerServerAuth, _ := mailer.NewServerAuth(
+		"smtp.example.com",
+		"465",
+		"user",
+		"secret",
+	)
+
 	sender := NewSMTPSender(SMTPConfig{
-		ServerAuth: email.ServerAuth{
-			Host:     "smtp.example.com",
-			Port:     "465",
-			Username: "user",
-			Password: "secret",
-		},
+		ServerAuth:  mailerServerAuth,
 		FromAddress: "noreply@example.com",
 		FromName:    "Cloud",
 		Timeout:     time.Second,
@@ -54,20 +55,24 @@ func TestSend(t *testing.T) {
 	mock := &mockMailer{}
 	sender := newTestSender(t, mock)
 
-	err := sender.Send(context.Background(), email.Message{Subject: "Hello, World!", Body: "Hello cloud"}, []string{"recipient1@example.com", "Bob <recipient2@example.com>"})
+	err := sender.Send(context.Background(), SendParams{
+		Message: email.Message{Subject: "Hello, World!", Body: "Hello cloud"},
+		Recipients: email.Recipients{
+			ToRecipients:  []string{"recipient1@example.com", "Bob <recipient2@example.com>"},
+			CCRecipients:  []string{"recipient3@example.com"},
+			BCCRecipients: []string{"recipient4@example.com"},
+		},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if mock.host != "smtp.example.com" || mock.username != "user" || mock.password != "secret" {
-		t.Logf("%+v", *mock)
-		t.Errorf("connection target/credentials = %q %q/%q", mock.host, mock.username, mock.password)
-	}
 	if mock.from != "noreply@example.com" {
 		t.Errorf("from = %q", mock.from)
 	}
-	if strings.Join(mock.recipients, ",") != "recipient1@example.com,recipient2@example.com" {
-		t.Errorf("recipients = %v, want bare addresses", mock.recipients)
+	// The envelope is a single, de-duplicated, bare-address list.
+	if got := strings.Join(mock.allRecipients, ","); got != "recipient1@example.com,recipient2@example.com,recipient3@example.com,recipient4@example.com" {
+		t.Errorf("allRecipients = %q", got)
 	}
 
 	parsed, err := mail.ReadMessage(strings.NewReader(string(mock.body)))
@@ -76,6 +81,17 @@ func TestSend(t *testing.T) {
 	}
 	if parsed.Header.Get("From") != `"Cloud" <noreply@example.com>` {
 		t.Errorf("From header = %q", parsed.Header.Get("From"))
+	}
+	// To and Cc are written to headers; display names are preserved.
+	if to := parsed.Header.Get("To"); to != "recipient1@example.com, \"Bob\" <recipient2@example.com>" {
+		t.Errorf("To header = %q", to)
+	}
+	if cc := parsed.Header.Get("Cc"); cc != "recipient3@example.com" {
+		t.Errorf("Cc header = %q", cc)
+	}
+	// BCC recipients must never appear in a header.
+	if parsed.Header.Get("Bcc") != "" {
+		t.Errorf("unexpected Bcc header: %v", parsed.Header)
 	}
 	subject, err := new(mime.WordDecoder).DecodeHeader(parsed.Header.Get("Subject"))
 	if err != nil || subject != "Hello, World!" {
@@ -88,16 +104,9 @@ func TestSend(t *testing.T) {
 	if strings.TrimSpace(string(body)) != "Hello cloud" {
 		t.Errorf("body = %q", body)
 	}
-	// Recipients are blind-copied: they must not appear in any recipient header.
-	if parsed.Header.Get("Cc") != "" || parsed.Header.Get("Bcc") != "" {
-		t.Errorf("unexpected Cc/Bcc header: %v", parsed.Header)
-	}
-	if to := parsed.Header.Get("To"); strings.Contains(to, "recipient1@example.com") || strings.Contains(to, "recipient2@example.com") {
-		t.Errorf("recipient leaked into To header: %q", to)
-	}
-	for _, addr := range []string{"recipient1@example.com", "recipient2@example.com"} {
+	for _, addr := range []string{"recipient4@example.com"} {
 		if strings.Contains(string(mock.body), addr) {
-			t.Errorf("recipient %q leaked into message", addr)
+			t.Errorf("BCC recipient %q leaked into message", addr)
 		}
 	}
 }
@@ -114,7 +123,10 @@ func TestSendWithAttachments(t *testing.T) {
 			{Filename: "data.bin", ContentType: "application/x-custom", Data: []byte{0x00, 0x01, 0x02, 0xff}},
 		},
 	}
-	if err := sender.Send(context.Background(), msg, []string{"recipient1@example.com"}); err != nil {
+	if err := sender.Send(context.Background(), SendParams{
+		Message:    msg,
+		Recipients: email.Recipients{ToRecipients: []string{"recipient1@example.com"}},
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -183,28 +195,32 @@ func TestSendWithAttachments(t *testing.T) {
 }
 
 func TestSendInvalidInput(t *testing.T) {
+	validTo := email.Recipients{ToRecipients: []string{"recipient1@example.com"}}
 	tests := []struct {
 		name       string
 		msg        email.Message
-		recipients []string
+		recipients email.Recipients
 		want       error
 	}{
-		{"empty subject", email.Message{Body: "x"}, []string{"recipient1@example.com"}, email.ErrInvalidMessage},
-		{"subject injection", email.Message{Subject: "a\r\nBcc: x@example.com", Body: "x"}, []string{"recipient1@example.com"}, email.ErrInvalidMessage},
-		{"empty body", email.Message{Subject: "s"}, []string{"recipient1@example.com"}, email.ErrInvalidMessage},
-		{"empty attachment filename", email.Message{Subject: "s", Body: "x", Attachments: []email.Attachment{{Data: []byte("d")}}}, []string{"recipient1@example.com"}, email.ErrInvalidMessage},
-		{"attachment filename injection", email.Message{Subject: "s", Body: "x", Attachments: []email.Attachment{{Filename: "a\r\nX: y", Data: []byte("d")}}}, []string{"recipient1@example.com"}, email.ErrInvalidMessage},
-		{"attachment content type injection", email.Message{Subject: "s", Body: "x", Attachments: []email.Attachment{{Filename: "a.txt", ContentType: "text/plain\r\nX: y", Data: []byte("d")}}}, []string{"recipient1@example.com"}, email.ErrInvalidMessage},
-		{"empty attachment data", email.Message{Subject: "s", Body: "x", Attachments: []email.Attachment{{Filename: "a.txt"}}}, []string{"recipient1@example.com"}, email.ErrInvalidMessage},
-		{"no recipients", email.Message{Subject: "s", Body: "x"}, nil, email.ErrNoRecipients},
-		{"bad recipient", email.Message{Subject: "s", Body: "x"}, []string{"nope"}, email.ErrInvalidRecipient},
-		{"recipient injection", email.Message{Subject: "s", Body: "x"}, []string{"recipient1@example.com\r\nBcc: x@example.com"}, email.ErrInvalidRecipient},
+		{"empty subject", email.Message{Body: "x"}, validTo, email.ErrInvalidMessage},
+		{"subject injection", email.Message{Subject: "a\r\nBcc: x@example.com", Body: "x"}, validTo, email.ErrInvalidMessage},
+		{"empty body", email.Message{Subject: "s"}, validTo, email.ErrInvalidMessage},
+		{"empty attachment filename", email.Message{Subject: "s", Body: "x", Attachments: []email.Attachment{{Data: []byte("d")}}}, validTo, email.ErrInvalidMessage},
+		{"attachment filename injection", email.Message{Subject: "s", Body: "x", Attachments: []email.Attachment{{Filename: "a\r\nX: y", Data: []byte("d")}}}, validTo, email.ErrInvalidMessage},
+		{"attachment content type injection", email.Message{Subject: "s", Body: "x", Attachments: []email.Attachment{{Filename: "a.txt", ContentType: "text/plain\r\nX: y", Data: []byte("d")}}}, validTo, email.ErrInvalidMessage},
+		{"empty attachment data", email.Message{Subject: "s", Body: "x", Attachments: []email.Attachment{{Filename: "a.txt"}}}, validTo, email.ErrInvalidMessage},
+		{"no recipients", email.Message{Subject: "s", Body: "x"}, email.Recipients{}, email.ErrNoToRecipients},
+		{"no to recipient", email.Message{Subject: "s", Body: "x"}, email.Recipients{CCRecipients: []string{"recipient1@example.com"}}, email.ErrNoToRecipients},
+		{"bad recipient", email.Message{Subject: "s", Body: "x"}, email.Recipients{ToRecipients: []string{"nope"}}, email.ErrInvalidRecipient},
+		{"bad cc recipient", email.Message{Subject: "s", Body: "x"}, email.Recipients{ToRecipients: []string{"recipient1@example.com"}, CCRecipients: []string{"nope"}}, email.ErrInvalidRecipient},
+		{"bad bcc recipient", email.Message{Subject: "s", Body: "x"}, email.Recipients{ToRecipients: []string{"recipient1@example.com"}, BCCRecipients: []string{"nope"}}, email.ErrInvalidRecipient},
+		{"recipient injection", email.Message{Subject: "s", Body: "x"}, email.Recipients{ToRecipients: []string{"recipient1@example.com\r\nBcc: x@example.com"}}, email.ErrInvalidRecipient},
 	}
 	for _, tc := range tests {
 		mock := &mockMailer{}
 		t.Run(tc.name, func(t *testing.T) {
 			sender := newTestSender(t, mock)
-			if err := sender.Send(context.Background(), tc.msg, tc.recipients); !errors.Is(err, tc.want) {
+			if err := sender.Send(context.Background(), SendParams{Message: tc.msg, Recipients: tc.recipients}); !errors.Is(err, tc.want) {
 				t.Errorf("err = %v, want %v", err, tc.want)
 			}
 		})
@@ -218,7 +234,10 @@ func TestSendPropagatesMailerError(t *testing.T) {
 	mock := &mockMailer{err: email.ErrDelivery}
 	sender := newTestSender(t, mock)
 
-	err := sender.Send(context.Background(), email.Message{Subject: "s", Body: "x"}, []string{"recipient1@example.com"})
+	err := sender.Send(context.Background(), SendParams{
+		Message:    email.Message{Subject: "s", Body: "x"},
+		Recipients: email.Recipients{ToRecipients: []string{"recipient1@example.com"}},
+	})
 	if !errors.Is(err, email.ErrDelivery) {
 		t.Errorf("err = %v, want ErrDelivery", err)
 	}

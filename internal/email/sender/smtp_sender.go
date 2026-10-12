@@ -11,16 +11,17 @@ import (
 	"github.com/hmcalister/Cirrus/internal/email/mailer"
 )
 
-// SMTPConfig configures a SMTPSender.
+var _ Sender = SMTPSender{}
+
 type SMTPConfig struct {
-	ServerAuth  email.ServerAuth
+	mailer.ServerAuth
 	FromAddress string
 	FromName    string
 	Timeout     time.Duration
 }
 
 type SMTPSender struct {
-	serverAuth  email.ServerAuth
+	mailer.ServerAuth
 	fromAddress mail.Address
 	timeout     time.Duration
 	mailer      mailer.Mailer
@@ -31,12 +32,6 @@ type SMTPSender struct {
 // Host, Port, and FromAddress are required and must be non-empty; a missing
 // value is a programming error and panics.
 func NewSMTPSender(cfg SMTPConfig) *SMTPSender {
-	if cfg.ServerAuth.Host == "" {
-		panic("email: SMTPConfig.Host must not be empty")
-	}
-	if cfg.ServerAuth.Port == "" {
-		panic("email: SMTPConfig.Port must not be empty")
-	}
 	if cfg.FromAddress == "" {
 		panic("email: SMTPConfig.FromAddress must not be empty")
 	}
@@ -47,7 +42,7 @@ func NewSMTPSender(cfg SMTPConfig) *SMTPSender {
 	}
 
 	return &SMTPSender{
-		serverAuth: cfg.ServerAuth,
+		ServerAuth: cfg.ServerAuth,
 		fromAddress: mail.Address{
 			Name:    cfg.FromName,
 			Address: addr,
@@ -61,15 +56,18 @@ func NewSMTPSender(cfg SMTPConfig) *SMTPSender {
 //
 // Invalid input is rejected before any network activity.
 // A cancelled or expired context is reported as the context's error.
-func (s *SMTPSender) Send(ctx context.Context, msg email.Message, recipients []string) error {
-	if err := email.ValidateMessage(msg); err != nil {
-		return err
-	}
-	addrs, err := email.ValidateRecipients(recipients)
+func (s SMTPSender) Send(ctx context.Context, sendParams SendParams) error {
+	err := email.ValidateMessage(sendParams.Message)
 	if err != nil {
 		return err
 	}
-	body, err := cirrusmime.BuildMIMEMessage(s.fromAddress, msg)
+
+	err = email.ValidateRecipients(sendParams.Recipients)
+	if err != nil {
+		return err
+	}
+
+	body, err := cirrusmime.BuildMIMEMessage(s.fromAddress, sendParams.Recipients, sendParams.Message)
 	if err != nil {
 		return err
 	}
@@ -81,9 +79,9 @@ func (s *SMTPSender) Send(ctx context.Context, msg email.Message, recipients []s
 	}
 
 	return s.mailer.Deliver(ctx, mailer.MailerDeliverParams{
-		ServerAuth: s.serverAuth,
-		From:       s.fromAddress.Address,
-		Recipients: addrs,
-		Body:       body,
+		ServerAuth:    s.ServerAuth,
+		From:          s.fromAddress.Address,
+		AllRecipients: mailer.EnvelopeRecipients(sendParams.Recipients),
+		Body:          body,
 	})
 }

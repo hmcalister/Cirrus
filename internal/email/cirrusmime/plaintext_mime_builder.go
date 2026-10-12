@@ -6,11 +6,11 @@ import (
 	"github.com/hmcalister/Cirrus/internal/email"
 )
 
-var _ emailBuilder = plaintextBuilder{}
+var _ mimeBuilder = plaintextMimeBuilder{}
 
-type plaintextBuilder struct{}
+type plaintextMimeBuilder struct{}
 
-func (builder plaintextBuilder) buildEmail(commonHeaders []string, msg email.Message) ([]byte, error) {
+func (builder plaintextMimeBuilder) buildEmail(commonHeaders []string, msg email.Message) ([]byte, error) {
 	body := normalizeCRLF(msg.Body)
 	return []byte(strings.Join(commonHeaders, "\r\n") + "\r\n\r\n" + body), nil
 }

@@ -12,8 +12,6 @@ import (
 	"github.com/hmcalister/Cirrus/internal/email"
 )
 
-// TestAttachmentBase64Wrapping verifies that encoded attachments use short
-// CRLF-terminated lines, as required for MIME body parts.
 func TestAttachmentBase64Wrapping(t *testing.T) {
 	data := bytes.Repeat([]byte{0xab}, 300) // 400 base64 chars, spans multiple lines
 	msg := email.Message{
@@ -25,7 +23,7 @@ func TestAttachmentBase64Wrapping(t *testing.T) {
 	rendered, err := BuildMIMEMessage(mail.Address{
 		Name:    "Cloud",
 		Address: "noreply@example.com",
-	}, msg)
+	}, email.Recipients{ToRecipients: []string{"recipient@example.com"}}, msg)
 	if err != nil {
 		t.Fatal(err)
 	}

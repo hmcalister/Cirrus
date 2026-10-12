@@ -14,7 +14,7 @@ var (
 	// Recipient is empty or not a valid address.
 	ErrInvalidRecipient = errors.New("email: invalid recipient")
 	// The recipient list was empty.
-	ErrNoRecipients = errors.New("email: no recipients")
+	ErrNoToRecipients = errors.New("email: must have at least one To recipient")
 	// The connection to the mail server could not be established or was lost.
 	ErrConnection = errors.New("email: connection failed")
 	// The mail server rejected auth credentials.
