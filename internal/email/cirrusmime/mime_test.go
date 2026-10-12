@@ -23,7 +23,7 @@ func TestAttachmentBase64Wrapping(t *testing.T) {
 	rendered, err := BuildMIMEMessage(mail.Address{
 		Name:    "Cloud",
 		Address: "noreply@example.com",
-	}, msg)
+	}, email.Recipients{ToRecipients: []string{"recipient@example.com"}}, msg)
 	if err != nil {
 		t.Fatal(err)
 	}
