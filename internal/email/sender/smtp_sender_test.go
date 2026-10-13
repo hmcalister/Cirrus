@@ -19,10 +19,13 @@ func TestNewSMTPRejectsBadFrom(t *testing.T) {
 		"user",
 		"secret",
 	)
-	NewSMTPSender(
+	_, err := NewSMTPSender(
 		SMTPConfig{
 			ServerAuth:  mailerServerAuth,
 			FromAddress: "not-an-address",
 			Timeout:     time.Second,
 		})
+	if err != nil {
+		t.Fatalf("got error %v, wanted nil", err)
+	}
 }
