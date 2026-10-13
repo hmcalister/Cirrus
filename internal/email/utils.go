@@ -8,6 +8,17 @@ import (
 	"strings"
 )
 
+// Remove tags like recipient+tag@email.com
+func Normalize(a string) string {
+	a = strings.ToLower(strings.TrimSpace(a))
+	if at := strings.LastIndexByte(a, '@'); at > 0 {
+		if plus := strings.IndexByte(a[:at], '+'); plus > 0 {
+			a = a[:plus] + a[at:]
+		}
+	}
+	return a
+}
+
 // Parse a single address and return the bare address.
 func ParseAddress(s string) (string, error) {
 	// Line breaks in a header value allow header injection.
