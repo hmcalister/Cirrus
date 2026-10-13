@@ -2,6 +2,7 @@ package sender
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/mail"
 	"time"
@@ -29,11 +30,10 @@ type SMTPSender struct {
 
 // Create a new SMTPSender from cfg. No connection is made until Send is called.
 //
-// Host, Port, and FromAddress are required and must be non-empty; a missing
-// value is a programming error and panics.
-func NewSMTPSender(cfg SMTPConfig) *SMTPSender {
+// Host, Port, and FromAddress are required and must be non-empty.
+func NewSMTPSender(cfg SMTPConfig) (*SMTPSender, error) {
 	if cfg.FromAddress == "" {
-		panic("email: SMTPConfig.FromAddress must not be empty")
+		return nil, errors.New("email: SMTPConfig.FromAddress must not be empty")
 	}
 
 	addr, err := email.ParseAddress(cfg.FromAddress)
@@ -49,7 +49,7 @@ func NewSMTPSender(cfg SMTPConfig) *SMTPSender {
 		},
 		timeout: cfg.Timeout,
 		mailer:  mailer.SMTPMailer{},
-	}
+	}, nil
 }
 
 // Send implements Sender.
