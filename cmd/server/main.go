@@ -53,12 +53,15 @@ func run() error {
 		return err
 	}
 
-	emailSender := sender.NewSMTPSender(sender.SMTPConfig{
+	emailSender, err := sender.NewSMTPSender(sender.SMTPConfig{
 		ServerAuth:  mailerServerAuth,
 		FromAddress: cfg.Email.FromAddress,
 		FromName:    cfg.Email.FromName,
 		Timeout:     cfg.Email.Timeout,
 	})
+	if err != nil {
+		return err
+	}
 
 	server := &http.Server{
 		Addr:              cfg.Server.Addr,

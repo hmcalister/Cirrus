@@ -41,7 +41,7 @@ func newTestSender(t *testing.T, m *mockMailer) *SMTPSender {
 		"secret",
 	)
 
-	sender := NewSMTPSender(SMTPConfig{
+	sender, _ := NewSMTPSender(SMTPConfig{
 		ServerAuth:  mailerServerAuth,
 		FromAddress: "noreply@example.com",
 		FromName:    "Cloud",
