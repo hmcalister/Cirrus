@@ -10,9 +10,11 @@ import (
 	"syscall"
 
 	"github.com/hmcalister/Cirrus/internal/api"
+	"github.com/hmcalister/Cirrus/internal/authentication"
 	"github.com/hmcalister/Cirrus/internal/config"
 	"github.com/hmcalister/Cirrus/internal/database"
 	"github.com/hmcalister/Cirrus/internal/email/mailer"
+	"github.com/hmcalister/Cirrus/internal/email/ratelimit"
 	"github.com/hmcalister/Cirrus/internal/email/sender"
 	"github.com/hmcalister/Cirrus/internal/logging"
 	"github.com/hmcalister/Cirrus/internal/postgres"
@@ -63,9 +65,48 @@ func run() error {
 		return err
 	}
 
+	ratelimitedEmailSender, err := ratelimit.NewRateLimitedSender(ratelimit.RateLimitedSenderConfig{
+		Next:                 emailSender,
+		AddressBurst:         cfg.EmailRateLimit.AddressBurst,
+		AddressInterval:      cfg.EmailRateLimit.AddressInterval,
+		GlobalBurst:          cfg.EmailRateLimit.GlobalBurst,
+		GlobalInterval:       cfg.EmailRateLimit.GlobalInterval,
+		SweepCadenceDuration: cfg.EmailRateLimit.SweepCadenceDuration,
+	})
+	if err != nil {
+		return err
+	}
+
+	linkBuilder, err := api.NewLinkBuilder(cfg.AuthHTTP.BaseURL)
+	if err != nil {
+		return err
+	}
+
+	authService, err := authentication.NewAuthenticationService(authentication.AuthenticationConfig{
+		VerificationExpiryDuration: cfg.Auth.VerificationExpiryDuration,
+		ResetExpiryDuration:        cfg.Auth.ResetExpiryDuration,
+		SessionExpiryDuration:      cfg.Auth.SessionExpiryDuration,
+		Links:                      linkBuilder,
+		Querier:                    database.New(pool),
+		EmailSender:                ratelimitedEmailSender,
+	})
+	if err != nil {
+		return err
+	}
+
+	apiServer, err := api.NewServer(api.ServerConfig{
+		Querier:     database.New(pool),
+		Sender:      emailSender,
+		TokenLinks:  linkBuilder,
+		AuthService: authService,
+	})
+	if err != nil {
+		return err
+	}
+
 	server := &http.Server{
 		Addr:              cfg.Server.Addr,
-		Handler:           api.NewServer(database.New(pool), emailSender).Routes(),
+		Handler:           apiServer.Routes(),
 		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,

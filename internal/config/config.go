@@ -1,13 +1,56 @@
-// Package config loads application configuration from the environment.
-
 package config
 
 import (
+	"errors"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"os"
+	"strconv"
 	"time"
+)
+
+// Environment variable names. Centralised here so that a rename is a single
+// edit and so that the names can be reused by tests.
+const (
+	envDebug = "DEBUG"
+
+	envHTTPAddr              = "HTTP_ADDR"
+	envHTTPReadHeaderTimeout = "HTTP_READ_HEADER_TIMEOUT"
+	envHTTPReadTimeout       = "HTTP_READ_TIMEOUT"
+	envHTTPWriteTimeout      = "HTTP_WRITE_TIMEOUT"
+	envHTTPIdleTimeout       = "HTTP_IDLE_TIMEOUT"
+	envHTTPShutdownTimeout   = "HTTP_SHUTDOWN_TIMEOUT"
+
+	envPostgresUser     = "POSTGRES_USER"
+	envPostgresPassword = "POSTGRES_PASSWORD"
+	envPostgresHost     = "POSTGRES_HOST"
+	envPostgresPort     = "POSTGRES_PORT"
+	envPostgresDB       = "POSTGRES_DB"
+
+	envDBMaxConns          = "DB_MAX_CONNS"
+	envDBMinConns          = "DB_MIN_CONNS"
+	envDBMaxConnLifetime   = "DB_MAX_CONN_LIFETIME"
+	envDBMaxConnIdleTime   = "DB_MAX_CONN_IDLE_TIME"
+	envDBHealthCheckPeriod = "DB_HEALTH_CHECK_PERIOD"
+
+	envEmailSMTPHost     = "EMAIL_SMTP_HOST"
+	envEmailSMTPPort     = "EMAIL_SMTP_PORT"
+	envEmailSMTPUsername = "EMAIL_SMTP_USERNAME"
+	envEmailSMTPPassword = "EMAIL_SMTP_PASSWORD"
+	envEmailFromAddress  = "EMAIL_FROM_ADDRESS"
+	envEmailFromName     = "EMAIL_FROM_NAME"
+	envEmailSMTPTimeout  = "EMAIL_SMTP_TIMEOUT"
+
+	envEmailRateLimitAddressBurst         = "EMAIL_RATE_LIMIT_ADDRESS_BURST"
+	envEmailRateLimitAddressInterval      = "EMAIL_RATE_LIMIT_ADDRESS_INTERVAL"
+	envEmailRateLimitGlobalBurst          = "EMAIL_RATE_LIMIT_GLOBAL_BURST"
+	envEmailRateLimitGlobalInterval       = "EMAIL_RATE_LIMIT_GLOBAL_INTERVAL"
+	envEmailRateLimitSweepCadenceDuration = "EMAIL_RATE_LIMIT_SWEEP_CADENCE"
+
+	envAuthVerificationExpiry = "AUTH_VERIFICATION_EXPIRY"
+	envAuthResetExpiry        = "AUTH_RESET_EXPIRY"
+	envAuthSessionExpiry      = "AUTH_SESSION_EXPIRY"
+	envAuthBaseURL            = "AUTH_BASE_URL"
 )
 
 type DatabaseConfig struct {
@@ -38,76 +81,147 @@ type EmailConfig struct {
 	Timeout     time.Duration
 }
 
-type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	Email    EmailConfig
-	Debug    bool
+type EmailRateLimitConfig struct {
+	AddressBurst         int
+	AddressInterval      time.Duration
+	GlobalBurst          int
+	GlobalInterval       time.Duration
+	SweepCadenceDuration time.Duration
 }
 
+type AuthenticationConfig struct {
+	VerificationExpiryDuration time.Duration
+	ResetExpiryDuration        time.Duration
+	SessionExpiryDuration      time.Duration
+}
+
+type AuthHTTPConfig struct {
+	BaseURL string
+}
+
+type Config struct {
+	Server         ServerConfig
+	Database       DatabaseConfig
+	Email          EmailConfig
+	EmailRateLimit EmailRateLimitConfig
+	Auth           AuthenticationConfig
+	AuthHTTP       AuthHTTPConfig
+	Debug          bool
+}
+
+// Read the application configuration from the environment.
+//
+// Every problem found while reading the environment is collected and returned.
 func Load() (Config, error) {
-	dsn := url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword(getRequiredEnv("POSTGRES_USER"), getRequiredEnv("POSTGRES_PASSWORD")),
-		Host:   getRequiredEnv("POSTGRES_HOST") + ":" + getRequiredEnv("POSTGRES_PORT"),
-		Path:   "/" + getRequiredEnv("POSTGRES_DB"),
+	var errs []error
+
+	require_string := func(key string) string {
+		value, err := requiredEnv(key)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		return value
+	}
+	require_duration := func(key string) time.Duration {
+		value, err := requiredDuration(key)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		return value
+	}
+	require_int32 := func(key string) int32 {
+		value, err := requiredInt32(key)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		return value
+	}
+	require_int := func(key string) int {
+		return int(require_int32(key))
 	}
 
-	return Config{
+	dsn := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(require_string(envPostgresUser), require_string(envPostgresPassword)),
+		Host:   require_string(envPostgresHost) + ":" + require_string(envPostgresPort),
+		Path:   "/" + require_string(envPostgresDB),
+	}
+
+	cfg := Config{
 		Server: ServerConfig{
-			Addr:              getRequiredEnv("HTTP_ADDR"),
-			ReadHeaderTimeout: toDurationStrict(getRequiredEnv("HTTP_READ_HEADER_TIMEOUT")),
-			ReadTimeout:       toDurationStrict(getRequiredEnv("HTTP_READ_TIMEOUT")),
-			WriteTimeout:      toDurationStrict(getRequiredEnv("HTTP_WRITE_TIMEOUT")),
-			IdleTimeout:       toDurationStrict(getRequiredEnv("HTTP_IDLE_TIMEOUT")),
-			ShutdownTimeout:   toDurationStrict(getRequiredEnv("HTTP_SHUTDOWN_TIMEOUT")),
+			Addr:              require_string(envHTTPAddr),
+			ReadHeaderTimeout: require_duration(envHTTPReadHeaderTimeout),
+			ReadTimeout:       require_duration(envHTTPReadTimeout),
+			WriteTimeout:      require_duration(envHTTPWriteTimeout),
+			IdleTimeout:       require_duration(envHTTPIdleTimeout),
+			ShutdownTimeout:   require_duration(envHTTPShutdownTimeout),
 		},
 		Database: DatabaseConfig{
 			DatabaseURL:       dsn.String(),
-			MaxConns:          toInt32Strict(getRequiredEnv("DB_MAX_CONNS")),
-			MinConns:          toInt32Strict(getRequiredEnv("DB_MIN_CONNS")),
-			MaxConnLifetime:   toDurationStrict(getRequiredEnv("DB_MAX_CONN_LIFETIME")),
-			MaxConnIdleTime:   toDurationStrict(getRequiredEnv("DB_MAX_CONN_IDLE_TIME")),
-			HealthCheckPeriod: toDurationStrict(getRequiredEnv("DB_HEALTH_CHECK_PERIOD")),
+			MaxConns:          require_int32(envDBMaxConns),
+			MinConns:          require_int32(envDBMinConns),
+			MaxConnLifetime:   require_duration(envDBMaxConnLifetime),
+			MaxConnIdleTime:   require_duration(envDBMaxConnIdleTime),
+			HealthCheckPeriod: require_duration(envDBHealthCheckPeriod),
 		},
 		Email: EmailConfig{
-			Host:        getRequiredEnv("EMAIL_SMTP_HOST"),
-			Port:        getRequiredEnv("EMAIL_SMTP_PORT"),
-			Username:    getRequiredEnv("EMAIL_SMTP_USERNAME"),
-			Password:    getRequiredEnv("EMAIL_SMTP_PASSWORD"),
-			FromAddress: getRequiredEnv("EMAIL_FROM_ADDRESS"),
-			FromName:    getRequiredEnv("EMAIL_FROM_NAME"),
-			Timeout:     toDurationStrict(getRequiredEnv("EMAIL_SMTP_TIMEOUT")),
+			Host:        require_string(envEmailSMTPHost),
+			Port:        require_string(envEmailSMTPPort),
+			Username:    require_string(envEmailSMTPUsername),
+			Password:    require_string(envEmailSMTPPassword),
+			FromAddress: require_string(envEmailFromAddress),
+			FromName:    require_string(envEmailFromName),
+			Timeout:     require_duration(envEmailSMTPTimeout),
 		},
-		Debug: os.Getenv("DEBUG") != "",
-	}, nil
+		EmailRateLimit: EmailRateLimitConfig{
+			AddressBurst:         require_int(envEmailRateLimitAddressBurst),
+			AddressInterval:      require_duration(envEmailRateLimitAddressInterval),
+			GlobalBurst:          require_int(envEmailRateLimitGlobalBurst),
+			GlobalInterval:       require_duration(envEmailRateLimitGlobalInterval),
+			SweepCadenceDuration: require_duration(envEmailRateLimitSweepCadenceDuration),
+		},
+		Auth: AuthenticationConfig{
+			VerificationExpiryDuration: require_duration(envAuthVerificationExpiry),
+			ResetExpiryDuration:        require_duration(envAuthResetExpiry),
+			SessionExpiryDuration:      require_duration(envAuthSessionExpiry),
+		},
+		AuthHTTP: AuthHTTPConfig{
+			BaseURL: require_string(envAuthBaseURL),
+		},
+		Debug: os.Getenv(envDebug) != "",
+	}
+
+	return cfg, errors.Join(errs...)
 }
 
-// Loads an environment variable associated with the given key, or panics.
-func getRequiredEnv(key string) string {
+func requiredEnv(key string) (string, error) {
 	value := os.Getenv(key)
 	if value == "" {
-		slog.Error("required environment variable is not set", "variable", key)
-		panic("required environment variable not set")
+		return "", fmt.Errorf("required environment variable %s is not set", key)
 	}
-	return value
+	return value, nil
 }
 
-func toDurationStrict(durationStr string) time.Duration {
-	d, err := time.ParseDuration(durationStr)
+func requiredDuration(key string) (time.Duration, error) {
+	value, err := requiredEnv(key)
 	if err != nil {
-		slog.Error("string could not be parsed to duration", "durationStr", durationStr)
-		panic("invalid duration found in strict parsing")
+		return 0, err
 	}
-	return d
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, fmt.Errorf("environment variable %s is not a duration: %w", key, err)
+	}
+	return d, nil
 }
 
-func toInt32Strict(intStr string) int32 {
-	var i int32
-	n, err := fmt.Sscanf(intStr, "%d", &i)
-	if err != nil || n != 1 {
-		slog.Error("string could not be parsed to int32", "intStr", intStr)
-		panic("invalid int32 found in strict parsing")
+func requiredInt32(key string) (int32, error) {
+	value, err := requiredEnv(key)
+	if err != nil {
+		return 0, err
 	}
-	return i
+	i, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		return 0, fmt.Errorf("environment variable %s is not an int32: %w", key, err)
+	}
+	return int32(i), nil
 }
