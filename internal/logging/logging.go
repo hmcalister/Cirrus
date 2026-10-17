@@ -1,4 +1,3 @@
-// Package logging configures the process-wide slog logger.
 package logging
 
 import (
@@ -6,9 +5,10 @@ import (
 	"os"
 )
 
-// Setup installs the default logger.
+// Configure the default logger.
 //
-// In debug mode logs are human-readable text at DEBUG level, otherwise JSON at INFO level.
+// If debug is set, logs are DEBUG-level human-readable text.
+// Otherwise, logs are INFO-level JSON.
 func Setup(debug bool) {
 	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
 

@@ -73,7 +73,7 @@ func (s *RateLimitedSender) Send(ctx context.Context, params sender.SendParams) 
 	return s.next.Send(ctx, params)
 }
 
-// Check the address rate limit (init if it exists) and the global rate limit.
+// Check the address rate limit (init if it does not exist) and the global rate limit.
 // If both have a token, decrement both and return nil.
 // If either has no tokens, return an error.
 func (s *RateLimitedSender) checkRateLimits(r email.Recipients) error {
