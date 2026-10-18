@@ -139,3 +139,9 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 		SameSite: http.SameSiteLaxMode,
 	})
 }
+
+// Renders err as the named error fragment with its mapped status.
+func (s *Server) renderAuthError(w http.ResponseWriter, templateName string, err error) {
+	status, message := authErrorStatus(err)
+	s.renderFragment(w, status, templateName, errorFragment(message))
+}
