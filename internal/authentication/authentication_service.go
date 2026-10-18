@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/hmcalister/Cirrus/internal/database"
-	"github.com/hmcalister/Cirrus/internal/email"
 	"github.com/hmcalister/Cirrus/internal/email/sender"
+	"github.com/hmcalister/Cirrus/internal/template"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -26,9 +26,10 @@ type AuthenticationConfig struct {
 	ResetExpiryDuration        time.Duration
 	SessionExpiryDuration      time.Duration
 	// Links builds the verification and reset URLs sent by email.
-	Links       TokenLinkBuilder
-	Querier     database.Querier
-	EmailSender sender.Sender
+	Links         TokenLinkBuilder
+	Querier       database.Querier
+	EmailSender   sender.Sender
+	EmailRenderer template.EmailRenderer
 }
 
 // AuthenticationService manages account registration, verification, login, and
@@ -59,6 +60,9 @@ func NewAuthenticationService(cfg AuthenticationConfig) (*AuthenticationService,
 	}
 	if cfg.EmailSender == nil {
 		return nil, errors.New("emailSender must be non-nil")
+	}
+	if cfg.EmailRenderer == nil {
+		return nil, errors.New("emailRenderer must be non-nil")
 	}
 
 	return &AuthenticationService{
@@ -236,12 +240,17 @@ func (s *AuthenticationService) RequestPasswordReset(ctx context.Context, userEm
 		return err
 	}
 
+	body, err := s.EmailRenderer.RenderEmail(template.TemplatePasswordReset, struct {
+		Link string
+	}{Link: s.Links.PasswordResetLink(raw)})
+	if err != nil {
+		return err
+	}
+
 	return s.EmailSender.Send(ctx, sender.SendParams{
-		Message: email.Message{
-			Subject: "Password Reset",
-			Body:    s.Links.PasswordResetLink(raw),
-		},
-		Recipients: email.Recipients{ToRecipients: []string{normalized}},
+		Subject:      "Password Reset",
+		Body:         body,
+		ToRecipients: []string{normalized},
 	})
 }
 
@@ -366,9 +375,16 @@ func (s *AuthenticationService) sendVerificationEmail(ctx context.Context, userI
 		return err
 	}
 
+	body, err := s.EmailRenderer.RenderEmail(template.TemplateVerification, struct {
+		Link string
+	}{Link: s.Links.VerificationLink(raw)})
+	if err != nil {
+		return err
+	}
+
 	return s.EmailSender.Send(ctx, sender.SendParams{
 		Subject:      "Account Verification",
-		Body:         s.Links.VerificationLink(raw),
+		Body:         body,
 		ToRecipients: []string{userEmail},
 	})
 }
