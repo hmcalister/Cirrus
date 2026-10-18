@@ -48,6 +48,8 @@ func setValidEnv(t *testing.T) {
 		envAuthResetExpiry:        "1h",
 		envAuthSessionExpiry:      "720h",
 		envAuthBaseURL:            "https://cloud.example.com",
+
+		envTemplateDirectory: "/templates",
 	} {
 		t.Setenv(key, value)
 	}
@@ -81,6 +83,9 @@ func TestLoadValid(t *testing.T) {
 	}
 	if cfg.AuthHTTP.BaseURL != "https://cloud.example.com" {
 		t.Errorf("AuthHTTP.BaseURL = %q", cfg.AuthHTTP.BaseURL)
+	}
+	if cfg.Templates.Directory != "/templates" {
+		t.Errorf("Templates.Dir = %q, want /templates", cfg.Templates.Directory)
 	}
 	if !cfg.Debug {
 		t.Error("Debug = false, want true")
@@ -137,5 +142,18 @@ func TestLoadOptionalVariables(t *testing.T) {
 	}
 	if cfg.Debug {
 		t.Error("Debug = true, want false when unset")
+	}
+}
+
+func TestLoadTemplateDirDefault(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv(envTemplateDirectory, "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Templates.Directory != defaultTemplateDir {
+		t.Errorf("Templates.Dir = %q, want default %q", cfg.Templates.Directory, defaultTemplateDir)
 	}
 }
