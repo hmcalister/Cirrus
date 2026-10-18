@@ -110,11 +110,10 @@ func run() error {
 	}
 
 	apiServer, err := api.NewServer(api.ServerConfig{
-		Querier:       database.New(pool),
-		Sender:        emailSender,
-		TokenLinks:    linkBuilder,
 		AuthService:   authService,
 		PagesRenderer: templateLoader,
+		// Debug serves plain HTTP, where a Secure cookie would never be sent.
+		CookieSecure: !cfg.Debug,
 	})
 	if err != nil {
 		return err
