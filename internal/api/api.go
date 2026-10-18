@@ -40,17 +40,14 @@ type Server struct {
 }
 
 func NewServer(cfg ServerConfig) (*Server, error) {
-	if cfg.TokenLinks == nil {
-		return nil, errors.New("TokenLinks must be non-nil")
+	if cfg.AuthService == nil {
+		return nil, errors.New("authService must be non-nil")
 	}
 	if cfg.PagesRenderer == nil {
-		return nil, errors.New("PagesRender must be non-nil")
+		return nil, errors.New("pagesRenderer must be non-nil")
 	}
 
-	return &Server{
-		ServerConfig: cfg,
-		cookieSecure: true,
-	}, nil
+	return &Server{ServerConfig: cfg, now: time.Now}, nil
 }
 
 func (s *Server) Routes() http.Handler {
