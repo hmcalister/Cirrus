@@ -52,30 +52,35 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
+
+	mux.Handle("GET /{$}", s.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/account", http.StatusSeeOther)
+	})))
+
 	mux.HandleFunc("GET /healthz", s.handleHealth)
-	mux.Handle("GET /me", s.RequireAuth(http.HandlerFunc(s.handleMe)))
-	return mux
-}
 
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
+	mux.HandleFunc("GET /login", s.handleLoginPage)
+	mux.HandleFunc("GET /register", s.handleRegisterPage)
+	mux.HandleFunc("GET /reset", s.handleResetPage)
+	mux.HandleFunc("GET /verify", s.handleVerify)
+	mux.HandleFunc("GET /password/reset", s.handlePasswordResetRequestPage)
+	mux.HandleFunc("GET /verify/resend", s.handleVerifyResendPage)
 
-func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"email": emailFromContext(r.Context())})
-}
+	mux.HandleFunc("POST /login", s.handleLogin)
+	mux.HandleFunc("POST /register", s.handleRegister)
+	mux.HandleFunc("POST /logout", s.handleLogout)
+	mux.HandleFunc("POST /password/reset", s.handlePasswordResetRequest)
+	mux.HandleFunc("POST /reset", s.handleReset)
+	mux.HandleFunc("POST /verify/resend", s.handleVerifyResend)
 
-// Middleware for authentication.
-// Wraps next so that only requests carrying a valid session token reach it.
-// The email of the authenticated user is placed in the request context, where handlers read it with emailFromContext.
-func (s *Server) RequireAuth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw := sessionToken(r, authenticationCookieName)
-		userEmail, ok := s.AuthService.SessionEmail(r.Context(), raw)
-		if !ok {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-			return
-		}
-		next.ServeHTTP(w, r.WithContext(withEmail(r.Context(), userEmail)))
-	})
+	mux.Handle("GET /static/", staticHandler())
+
+	accountRoutes := http.NewServeMux()
+	accountRoutes.HandleFunc("GET /account", s.handleAccountPage)
+	accountRoutes.HandleFunc("POST /account/setActive", s.handleSetActive)
+	accountRoutes.HandleFunc("POST /account/delete", s.handleDelete)
+	mux.Handle("/account", s.RequireAuth(accountRoutes))
+	mux.Handle("/account/", s.RequireAuth(accountRoutes))
+
+	return s.logRequests(mux)
 }
