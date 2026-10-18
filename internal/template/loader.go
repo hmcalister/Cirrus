@@ -1,7 +1,3 @@
-// Package template loads and renders the operator-editable templates that live
-// outside the binary. Templates are mounted into the container (or read from the
-// working directory on the host) so that their content can change without a
-// redeploy.
 package template
 
 import (
@@ -9,19 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"io"
 	"io/fs"
 	texttemplate "text/template"
 )
 
-// Names of the templates required at startup.
-const (
-	TemplateVerification  = "verification.tmpl"
-	TemplatePasswordReset = "password_reset.tmpl"
+// Renders a plain-text email body.
+type EmailRenderer interface {
+	RenderEmail(templateName string, data any) (string, error)
+}
 
-	// Template file pattern accepted in template directory.
-	templatePattern = "*.tmpl"
-)
+// Renders an HTML page.
+type PageRenderer interface {
+	RenderPage(templateName string, data any) (string, error)
+}
 
 var (
 	_ EmailRenderer = (*Loader)(nil)
@@ -29,19 +25,20 @@ var (
 )
 
 type Loader struct {
-	email *texttemplate.Template
-	web   *template.Template
+	email_templates *texttemplate.Template
+	web_templates   *template.Template
 }
 
-func NewLoader(fsys fs.FS, emailDir, webDir string, requiredEmail, requiredWeb []string) (*Loader, error) {
+// Builds a template loader from the embedded FS.
+// Required templates, as defined in `internal/template/embed.go` are checked at init time.
+func New() (*Loader, error) {
+	return newLoaderInternal(FS, RequiredEmailTemplates, RequiredWebTemplates)
+}
+
+// Internal constructor that allows setting required files. For testing.
+func newLoaderInternal(fsys fs.FS, requiredEmail, requiredWeb []string) (*Loader, error) {
 	if fsys == nil {
 		return nil, errors.New("template: fsys must be non-nil")
-	}
-	if emailDir == "" {
-		return nil, errors.New("template: emailDir must not be empty")
-	}
-	if webDir == "" {
-		return nil, errors.New("template: webDir must not be empty")
 	}
 	if err := requireTemplates(fsys, emailDir, requiredEmail); err != nil {
 		return nil, err
@@ -59,14 +56,17 @@ func NewLoader(fsys fs.FS, emailDir, webDir string, requiredEmail, requiredWeb [
 		return nil, err
 	}
 
-	return &Loader{email: email, web: web}, nil
+	return &Loader{email_templates: email, web_templates: web}, nil
 }
 
 // Execute the named text template and return its body.
 func (l *Loader) RenderEmail(templateName string, data any) (string, error) {
-	tmpl, err := l.getTemplate(kindEmail, templateName)
-	if err != nil {
-		return "", err
+	if l.email_templates == nil {
+		return "", fmt.Errorf("template: email template %q not found", templateName)
+	}
+	tmpl := l.email_templates.Lookup(templateName)
+	if tmpl == nil {
+		return "", fmt.Errorf("template: email template %q not found", templateName)
 	}
 
 	var buf bytes.Buffer
@@ -76,40 +76,19 @@ func (l *Loader) RenderEmail(templateName string, data any) (string, error) {
 	return buf.String(), nil
 }
 
-// Execute the named HTML template, writing the escaped result to w.
-func (l *Loader) RenderPage(w io.Writer, templateName string, data any) error {
-	tmpl, err := l.getTemplate(kindWeb, templateName)
-	if err != nil {
-		return err
+// Execute the named HTML template and return the escaped page.
+func (l *Loader) RenderPage(templateName string, data any) (string, error) {
+	if l.web_templates == nil {
+		return "", fmt.Errorf("template: web template %q not found", templateName)
+	}
+	tmpl := l.web_templates.Lookup(templateName)
+	if tmpl == nil {
+		return "", fmt.Errorf("template: web template %q not found", templateName)
 	}
 
-	if err := tmpl.Execute(w, data); err != nil {
-		return fmt.Errorf("template: rendering page %q: %w", templateName, err)
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("template: rendering page %q: %w", templateName, err)
 	}
-	return nil
-}
-
-func (l *Loader) getTemplate(kind templateKind, name string) (renderable, error) {
-	switch kind {
-	case kindEmail:
-		if l.email == nil {
-			return nil, fmt.Errorf("template: email template %q not found", name)
-		}
-		tmpl := l.email.Lookup(name)
-		if tmpl == nil {
-			return nil, fmt.Errorf("template: email template %q not found", name)
-		}
-		return tmpl, nil
-	case kindWeb:
-		if l.web == nil {
-			return nil, fmt.Errorf("template: web template %q not found", name)
-		}
-		tmpl := l.web.Lookup(name)
-		if tmpl == nil {
-			return nil, fmt.Errorf("template: web template %q not found", name)
-		}
-		return tmpl, nil
-	default:
-		return nil, fmt.Errorf("template: unknown template kind %d", kind)
-	}
+	return buf.String(), nil
 }
