@@ -496,7 +496,7 @@ func TestLogin(t *testing.T) {
 
 	t.Run("inactive account can still log in", func(t *testing.T) {
 		service, _, _ := newVerifiedService(t)
-		if err := service.DeactivateAccount(bg, "user@example.com"); err != nil {
+		if err := service.SetAccountActive(bg, "user@example.com", false); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := service.Login(bg, "user@example.com", "hunter2"); err != nil {
@@ -571,12 +571,11 @@ func TestDeactivateAndDeleteInvalidateSessions(t *testing.T) {
 		return service, token
 	}
 
-	t.Run("deactivate keeps sessions", func(t *testing.T) {
+	t.Run("SetAccountActive keeps sessions", func(t *testing.T) {
 		service, token := setup(t)
-		if err := service.DeactivateAccount(bg, "user@example.com"); err != nil {
+		if err := service.SetAccountActive(bg, "user@example.com", false); err != nil {
 			t.Fatal(err)
 		}
-		// Deactivating only opts out of daily emails; it does not log the user out.
 		if _, ok := service.SessionEmail(bg, token); !ok {
 			t.Error("session invalidated by deactivate")
 		}
@@ -588,8 +587,8 @@ func TestDeactivateAndDeleteInvalidateSessions(t *testing.T) {
 
 	t.Run("reactivate", func(t *testing.T) {
 		service, _ := setup(t)
-		_ = service.DeactivateAccount(bg, "user@example.com")
-		if err := service.ReactivateAccount(bg, "user@example.com"); err != nil {
+		_ = service.SetAccountActive(bg, "user@example.com", false)
+		if err := service.SetAccountActive(bg, "user@example.com", true); err != nil {
 			t.Fatal(err)
 		}
 		user, _ := service.Querier.GetUserByEmail(bg, "user@example.com")
