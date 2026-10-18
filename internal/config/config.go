@@ -51,7 +51,13 @@ const (
 	envAuthResetExpiry        = "AUTH_RESET_EXPIRY"
 	envAuthSessionExpiry      = "AUTH_SESSION_EXPIRY"
 	envAuthBaseURL            = "AUTH_BASE_URL"
+
+	envTemplateDirectory = "TEMPLATE_DIRECTORY"
 )
+
+// defaultTemplateDir is used when TEMPLATE_DIRECTORY is unset, so that host runs work
+// without any extra configuration. The container overrides this to /templates.
+const defaultTemplateDir = "./templates"
 
 type DatabaseConfig struct {
 	DatabaseURL       string
@@ -99,6 +105,10 @@ type AuthHTTPConfig struct {
 	BaseURL string
 }
 
+type TemplatesConfig struct {
+	Directory string
+}
+
 type Config struct {
 	Server         ServerConfig
 	Database       DatabaseConfig
@@ -106,6 +116,7 @@ type Config struct {
 	EmailRateLimit EmailRateLimitConfig
 	Auth           AuthenticationConfig
 	AuthHTTP       AuthHTTPConfig
+	Templates      TemplatesConfig
 	Debug          bool
 }
 
@@ -188,10 +199,21 @@ func Load() (Config, error) {
 		AuthHTTP: AuthHTTPConfig{
 			BaseURL: require_string(envAuthBaseURL),
 		},
+		Templates: TemplatesConfig{
+			Directory: optionalEnv(envTemplateDirectory, defaultTemplateDir),
+		},
 		Debug: os.Getenv(envDebug) != "",
 	}
 
 	return cfg, errors.Join(errs...)
+}
+
+// Return the value of key, or fallback when the variable is unset or empty.
+func optionalEnv(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func requiredEnv(key string) (string, error) {
