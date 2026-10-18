@@ -31,9 +31,9 @@ const (
 )
 
 var (
-	RequiredEmailTemplates = []string{
+	requiredEmailTemplates = []string{
 		TemplateVerification,
 		TemplatePasswordReset,
 	}
-	RequiredWebTemplates = []string{}
+	requiredWebTemplates = []string{
 )
