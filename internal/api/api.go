@@ -7,6 +7,7 @@ import (
 	"github.com/hmcalister/Cirrus/internal/authentication"
 	"github.com/hmcalister/Cirrus/internal/database"
 	"github.com/hmcalister/Cirrus/internal/email/sender"
+	"github.com/hmcalister/Cirrus/internal/template"
 )
 
 const (
@@ -14,10 +15,11 @@ const (
 )
 
 type ServerConfig struct {
-	Querier     database.Querier
-	Sender      sender.Sender
-	TokenLinks  authentication.TokenLinkBuilder
-	AuthService *authentication.AuthenticationService
+	Querier        database.Querier
+	Sender         sender.Sender
+	TokenLinks     authentication.TokenLinkBuilder
+	AuthService    *authentication.AuthenticationService
+	PagesTemplates template.PageRenderer
 }
 
 type Server struct {
@@ -28,6 +30,9 @@ type Server struct {
 func NewServer(cfg ServerConfig) (*Server, error) {
 	if cfg.TokenLinks == nil {
 		return nil, errors.New("TokenLinks must be non-nil")
+	}
+	if cfg.PagesTemplates == nil {
+		return nil, errors.New("Pages must be non-nil")
 	}
 
 	return &Server{
