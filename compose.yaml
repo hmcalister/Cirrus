@@ -40,9 +40,6 @@ services:
       AUTH_VERIFICATION_EXPIRY: ${AUTH_VERIFICATION_EXPIRY:-24h}
       AUTH_RESET_EXPIRY: ${AUTH_RESET_EXPIRY:-1h}
       AUTH_SESSION_EXPIRY: ${AUTH_SESSION_EXPIRY:-24h}
-      TEMPLATE_DIR: /templates
-    volumes:
-      - ./templates:/templates:ro
     user: "65532:65532"
     tmpfs:
       - /tmp
