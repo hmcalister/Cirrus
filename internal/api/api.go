@@ -1,15 +1,13 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/hmcalister/Cirrus/internal/authentication"
 	"github.com/hmcalister/Cirrus/internal/database"
 	"github.com/hmcalister/Cirrus/internal/email/sender"
+	"github.com/hmcalister/Cirrus/internal/template"
 )
 
 const (
@@ -17,10 +15,11 @@ const (
 )
 
 type ServerConfig struct {
-	Querier     database.Querier
-	Sender      sender.Sender
-	TokenLinks  authentication.TokenLinkBuilder
-	AuthService *authentication.AuthenticationService
+	Querier        database.Querier
+	Sender         sender.Sender
+	TokenLinks     authentication.TokenLinkBuilder
+	AuthService    *authentication.AuthenticationService
+	PagesTemplates template.PageRenderer
 }
 
 type Server struct {
@@ -31,6 +30,9 @@ type Server struct {
 func NewServer(cfg ServerConfig) (*Server, error) {
 	if cfg.TokenLinks == nil {
 		return nil, errors.New("TokenLinks must be non-nil")
+	}
+	if cfg.PagesTemplates == nil {
+		return nil, errors.New("Pages must be non-nil")
 	}
 
 	return &Server{
@@ -67,23 +69,4 @@ func (s *Server) RequireAuth(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r.WithContext(withEmail(r.Context(), userEmail)))
 	})
-}
-
-// Extract a session token from the request, preferring the session cookie and falling back to an Authorization Bearer header.
-func sessionToken(r *http.Request, cookieName string) string {
-	if cookie, err := r.Cookie(cookieName); err == nil {
-		return cookie.Value
-	}
-	if header := r.Header.Get("Authorization"); strings.HasPrefix(header, "Bearer ") {
-		return strings.TrimPrefix(header, "Bearer ")
-	}
-	return ""
-}
-
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(body); err != nil {
-		slog.Warn("error writing response body", "error", err)
-	}
 }
