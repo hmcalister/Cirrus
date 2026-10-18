@@ -3,6 +3,7 @@ package authentication
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,17 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type mockEmailRenderer struct {
+	err error
+}
+
+func (m mockEmailRenderer) RenderEmail(_ string, data any) (string, error) {
+	if m.err != nil {
+		return "", m.err
+	}
+	return fmt.Sprintf("rendered: %+v", data), nil
+}
 
 type mockTokenLinkBuilder struct{}
 
@@ -199,6 +211,7 @@ func newTestService(t *testing.T, q database.Querier, mail sender.Sender) *Authe
 		Links:                      mockTokenLinkBuilder{},
 		Querier:                    q,
 		EmailSender:                mail,
+		EmailRenderer:              mockEmailRenderer{},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -209,11 +222,18 @@ func newTestService(t *testing.T, q database.Querier, mail sender.Sender) *Authe
 	return service
 }
 
-func rawTokenFromLink(t *testing.T, link string) string {
+func rawTokenFromLink(t *testing.T, body string) string {
 	t.Helper()
-	_, raw, ok := strings.Cut(link, "token=")
-	if !ok {
-		t.Fatalf("link %q has no token", link)
+	token_prefix := "token="
+	i := strings.Index(body, token_prefix)
+	if i < 0 {
+		t.Fatalf("body %q has no token", body)
+	}
+	raw := body[i+len(token_prefix):]
+	// The rendered body wraps the link in other text.
+	// The token is the first URL-encoded run of characters after token prefix.
+	if end := strings.IndexAny(raw, " \n\r\t}\")"); end >= 0 {
+		raw = raw[:end]
 	}
 	return raw
 }
@@ -226,6 +246,7 @@ func TestNewAuthenticationServiceValidation(t *testing.T) {
 		Links:                      mockTokenLinkBuilder{},
 		Querier:                    newMockQuerier(),
 		EmailSender:                &mockSender{},
+		EmailRenderer:              mockEmailRenderer{},
 	}
 	tests := []struct {
 		name   string
@@ -237,6 +258,7 @@ func TestNewAuthenticationServiceValidation(t *testing.T) {
 		{"nil links", func(c *AuthenticationConfig) { c.Links = nil }},
 		{"nil querier", func(c *AuthenticationConfig) { c.Querier = nil }},
 		{"nil sender", func(c *AuthenticationConfig) { c.EmailSender = nil }},
+		{"nil renderer", func(c *AuthenticationConfig) { c.EmailRenderer = nil }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -690,5 +712,8 @@ func TestRegisterSendsThroughSender(t *testing.T) {
 	}
 	if mail.sent[0].Subject != "Account Verification" {
 		t.Errorf("Subject = %q", mail.sent[0].Subject)
+	}
+	if !strings.HasPrefix(mail.sent[0].Body, "rendered:") {
+		t.Errorf("Body = %q, want the rendered template", mail.sent[0].Body)
 	}
 }
