@@ -1,19 +1,17 @@
 package api
 
-import (
-	"io"
-	"testing"
-)
+import "testing"
 
 // Records the templates it is asked to render.
 type mockPageRenderer struct {
 	rendered []string
+	body     string
 	err      error
 }
 
-func (f *mockPageRenderer) RenderPage(_ io.Writer, templateName string, _ any) error {
+func (f *mockPageRenderer) RenderPage(templateName string, _ any) (string, error) {
 	f.rendered = append(f.rendered, templateName)
-	return f.err
+	return f.body, f.err
 }
 
 func TestNewServerRequiresPages(t *testing.T) {
@@ -24,8 +22,8 @@ func TestNewServerRequiresPages(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := ServerConfig{
-		TokenLinks:     linkBuilder,
-		PagesTemplates: nil,
+		TokenLinks:    linkBuilder,
+		PagesRenderer: nil,
 	}
 	if _, err := NewServer(cfg); err == nil {
 		t.Error("expected error for nil Pages, got nil")

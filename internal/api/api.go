@@ -15,11 +15,11 @@ const (
 )
 
 type ServerConfig struct {
-	Querier        database.Querier
-	Sender         sender.Sender
-	TokenLinks     authentication.TokenLinkBuilder
-	AuthService    *authentication.AuthenticationService
-	PagesTemplates template.PageRenderer
+	Querier       database.Querier
+	Sender        sender.Sender
+	TokenLinks    authentication.TokenLinkBuilder
+	AuthService   *authentication.AuthenticationService
+	PagesRenderer template.PageRenderer
 }
 
 type Server struct {
@@ -31,7 +31,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	if cfg.TokenLinks == nil {
 		return nil, errors.New("TokenLinks must be non-nil")
 	}
-	if cfg.PagesTemplates == nil {
+	if cfg.PagesRenderer == nil {
 		return nil, errors.New("Pages must be non-nil")
 	}
 
