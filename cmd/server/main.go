@@ -35,13 +35,15 @@ func run() error {
 	}
 	logging.Setup(cfg.Debug)
 
-	templateLoader, err := templates.NewLoader(
-		os.DirFS(cfg.Templates.Directory),
-		"email",
-		"web",
-		nil,
-		nil,
-	)
+	// Templates are embedded in the binary (internal/template/embed.go), so a
+	// content change is a code change: rebuild and redeploy. Parsing happens
+	// here, once, at startup.
+	//
+	// New parses every *.tmpl in the embedded FS (catching malformed templates)
+	// and fails if any name in the package's required lists is absent. The lists
+	// are code, not configuration; they live in the template package beside the
+	// constants.
+	templateLoader, err := templates.New()
 	if err != nil {
 		return err
 	}
@@ -108,11 +110,11 @@ func run() error {
 	}
 
 	apiServer, err := api.NewServer(api.ServerConfig{
-		Querier:        database.New(pool),
-		Sender:         emailSender,
-		TokenLinks:     linkBuilder,
-		AuthService:    authService,
-		PagesTemplates: templateLoader,
+		Querier:       database.New(pool),
+		Sender:        emailSender,
+		TokenLinks:    linkBuilder,
+		AuthService:   authService,
+		PagesRenderer: templateLoader,
 	})
 	if err != nil {
 		return err
