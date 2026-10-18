@@ -17,8 +17,9 @@ var FS embed.FS
 
 // Template directories within FS.
 const (
-	emailDir = "email"
-	webDir   = "web"
+	emailDir     = "email"
+	webDir       = "web"
+	WebStaticDir = webDir + "/static"
 	// Template file pattern accepted in template directory.
 	templatePattern = "*.tmpl"
 )
