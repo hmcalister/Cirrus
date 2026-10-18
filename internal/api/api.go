@@ -1,24 +1,33 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/hmcalister/Cirrus/internal/authentication"
-	"github.com/hmcalister/Cirrus/internal/database"
-	"github.com/hmcalister/Cirrus/internal/email/sender"
 	"github.com/hmcalister/Cirrus/internal/template"
 )
 
-const (
-	authenticationCookieName = "authenticationCookie"
-)
+// Interface over the authentication service.
+type authService interface {
+	Register(ctx context.Context, userEmail, password string) error
+	Verify(ctx context.Context, rawToken string) (bool, error)
+	Login(ctx context.Context, userEmail, password string) (string, error)
+	ResendVerification(ctx context.Context, userEmail string) error
+	RequestPasswordReset(ctx context.Context, userEmail string) error
+	ConfirmPasswordReset(ctx context.Context, rawToken, newPassword string) error
+	SetAccountActive(ctx context.Context, userEmail string, active bool) error
+	DeleteAccount(ctx context.Context, userEmail string) error
+	SessionEmail(ctx context.Context, rawToken string) (string, bool)
+	AccountActive(ctx context.Context, userEmail string) (bool, error)
+}
+
+var _ authService = (*authentication.AuthenticationService)(nil)
 
 type ServerConfig struct {
-	Querier       database.Querier
-	Sender        sender.Sender
-	TokenLinks    authentication.TokenLinkBuilder
-	AuthService   *authentication.AuthenticationService
+	AuthService   authService
 	PagesRenderer template.PageRenderer
 }
 
