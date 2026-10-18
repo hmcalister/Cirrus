@@ -2,16 +2,11 @@ package template
 
 // Tests for the template loader.
 //
-// This file is scaffolding: the cases below document how templates are tested
-// outside the compose stack and are skipped until real templates exist. They
-// run with plain `go test ./...` — no Docker, no environment variables, no
-// database.
-//
 // Approach:
 //
 //  1. Unit tests use fstest.MapFS so the templates live inside the test file and
-//     no disk layout is assumed. Pass a MapFS to New exactly as production passes
-//     os.DirFS.
+//     no disk layout is assumed. Pass a MapFS to NewLoader exactly as production
+//     passes the embedded FS.
 //  2. Golden tests execute a template into a bytes.Buffer and compare against a
 //     file in testdata/. Regenerate them with `go test ./internal/template -update`.
 //     Suggested layout: testdata/<case>/want.txt (email) or want.html (page).
@@ -19,19 +14,16 @@ package template
 //     plain text/template for pages fails loudly.
 //  4. Plain-text email bodies are asserted here. CRLF normalisation is NOT the
 //     loader's job; it is verified at the cirrusmime boundary.
-//  5. A last test parses the real repository tree so fixtures cannot drift from
-//     what ships. It needs a path to the root templates/ directory. Because
-//     os.DirFS does not stat until first use, build the path from the test file
-//     location (runtime.Caller) rather than the working directory, or switch to
-//     an embed.FS if templates are ever embedded in the binary. Note that
-//     .dockerignore currently excludes templates/, so embedding would require
-//     whitelisting them there.
+//  5. A last test parses the real embedded FS so fixtures cannot drift from what
+//     ships. Because templates are embedded, this is exact: NewLoader(FS, ...),
+//     with no path resolution. Keep the required lists in sync with
+//     cmd/server/main.go.
 
 import "testing"
 
 // TestNewParsesAllTemplates parses one valid template per kind.
 // Uses fstest.MapFS with an email template and a web template, then calls
-// RenderEmail and RenderPage to confirm both were parsed and are resolvable.
+// NewLoader and renders both to confirm they were parsed and are resolvable.
 func TestNewParsesAllTemplates(t *testing.T) {
 	t.Skip("scaffolding: enable once templates are authored")
 }
@@ -48,8 +40,8 @@ func TestNewMissingRequired(t *testing.T) {
 
 // TestNewEmptyDirectoryPasses pins the agreed rule: an empty directory is valid
 // when nothing is required from it. Pass an empty fstest.MapFS with empty
-// required slices and expect New to succeed; then expect RenderEmail to report
-// that the name was not found.
+// required slices and expect NewLoader to succeed; then expect RenderEmail to
+// report that the name was not found.
 func TestNewEmptyDirectoryPasses(t *testing.T) {
 	t.Skip("scaffolding: enable once templates are authored")
 }
@@ -76,11 +68,11 @@ func TestGolden(t *testing.T) {
 	t.Skip("scaffolding: enable once templates are authored")
 }
 
-// TestRealTemplatesParse parses the repository's actual templates/ directory so
-// that testdata fixtures cannot drift from what is deployed. Resolve the path
-// from runtime.Caller (test file location) instead of the working directory;
-// skip if the directory is absent or empty. Remember that the required lists
-// passed here must stay in sync with cmd/server/main.go.
+// TestRealTemplatesParse parses the embedded FS so that testdata fixtures cannot
+// drift from what is compiled into the binary: NewLoader(FS, requiredEmail,
+// requiredWeb). Because the FS is embedded, no path resolution is needed.
+// Remember that the required lists passed here must stay in sync with
+// cmd/server/main.go.
 func TestRealTemplatesParse(t *testing.T) {
 	t.Skip("scaffolding: enable once templates are authored")
 }
