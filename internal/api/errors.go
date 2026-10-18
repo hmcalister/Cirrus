@@ -8,6 +8,9 @@ import (
 )
 
 const (
+	// The generic fragment used when rendering fails unexpectedly.
+	genericErrorMessage = `<div class="message error">Something went wrong. Try again.</div>`
+
 	passwordResetSentMessage  = "If an account exists for that email, a reset link has been sent."
 	verificationResentMessage = "If an account exists for that email, a verification link has been sent."
 )
