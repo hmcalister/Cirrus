@@ -18,6 +18,7 @@ import (
 	"github.com/hmcalister/Cirrus/internal/email/sender"
 	"github.com/hmcalister/Cirrus/internal/logging"
 	"github.com/hmcalister/Cirrus/internal/postgres"
+	templates "github.com/hmcalister/Cirrus/internal/template"
 )
 
 func main() {
@@ -33,6 +34,17 @@ func run() error {
 		return err
 	}
 	logging.Setup(cfg.Debug)
+
+	templateLoader, err := templates.NewLoader(
+		os.DirFS(cfg.Templates.Directory),
+		"email",
+		"web",
+		nil,
+		nil,
+	)
+	if err != nil {
+		return err
+	}
 
 	// Cancelled on SIGINT/SIGTERM
 	// i.e. how Podman compose stops the container.
@@ -89,16 +101,18 @@ func run() error {
 		Links:                      linkBuilder,
 		Querier:                    database.New(pool),
 		EmailSender:                ratelimitedEmailSender,
+		EmailRenderer:              templateLoader,
 	})
 	if err != nil {
 		return err
 	}
 
 	apiServer, err := api.NewServer(api.ServerConfig{
-		Querier:     database.New(pool),
-		Sender:      emailSender,
-		TokenLinks:  linkBuilder,
-		AuthService: authService,
+		Querier:        database.New(pool),
+		Sender:         emailSender,
+		TokenLinks:     linkBuilder,
+		AuthService:    authService,
+		PagesTemplates: templateLoader,
 	})
 	if err != nil {
 		return err
