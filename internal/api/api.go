@@ -29,11 +29,14 @@ var _ authService = (*authentication.AuthenticationService)(nil)
 type ServerConfig struct {
 	AuthService   authService
 	PagesRenderer template.PageRenderer
+	CookieSecure  bool
 }
 
 type Server struct {
 	ServerConfig
-	cookieSecure bool
+
+	// Enables deterministic request durations in tests. Never use time.Now directly.
+	now func() time.Time
 }
 
 func NewServer(cfg ServerConfig) (*Server, error) {
