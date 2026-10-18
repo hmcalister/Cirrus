@@ -84,3 +84,58 @@ func (s *Server) Routes() http.Handler {
 
 	return s.logRequests(mux)
 }
+
+// Renders a full page with the given template and data.
+func (s *Server) renderPage(w http.ResponseWriter, templateName string, data any) {
+	body, err := s.PagesRenderer.RenderPage(templateName, data)
+	if err != nil {
+		writePage(w, http.StatusInternalServerError, genericErrorMessage)
+		return
+	}
+
+	writePage(w, http.StatusOK, body)
+}
+
+// Renders the fragment named by templateName with the given status.
+//
+// Reports whether the fragment rendered. A false return means the renderer
+// failed and a generic 500 body was already written.
+func (s *Server) renderFragment(w http.ResponseWriter, status int, templateName string, data any) bool {
+	body, err := s.PagesRenderer.RenderPage(templateName, data)
+	if err != nil {
+		writePage(w, http.StatusInternalServerError, genericErrorMessage)
+		return false
+	}
+
+	writePage(w, status, body)
+	return true
+}
+
+func (s *Server) setSessionCookie(w http.ResponseWriter, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     authenticationCookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   s.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// Clears the session cookie.
+//
+// Sets an empty value with an immediate expiry so the browser drops it.
+func (s *Server) clearSessionCookie(w http.ResponseWriter) {
+	// Expires the session cookie immediately, used to log out.
+	const sessionCookieMaxAge = -1
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     authenticationCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   sessionCookieMaxAge,
+		HttpOnly: true,
+		Secure:   s.CookieSecure,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
