@@ -32,7 +32,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		return nil, errors.New("TokenLinks must be non-nil")
 	}
 	if cfg.PagesRenderer == nil {
-		return nil, errors.New("Pages must be non-nil")
+		return nil, errors.New("PagesRender must be non-nil")
 	}
 
 	return &Server{
