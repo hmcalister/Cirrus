@@ -31,8 +31,6 @@ type AuthenticationConfig struct {
 	EmailRenderer              template.EmailRenderer
 }
 
-// AuthenticationService manages account registration, verification, login, and
-// the lifecycle of an account. All methods are safe for concurrent use.
 type AuthenticationService struct {
 	AuthenticationConfig
 
@@ -161,11 +159,11 @@ func (s *AuthenticationService) Verify(ctx context.Context, rawToken string) (bo
 	return true, nil
 }
 
-// Login verifies credentials and issues a session token.
+// SignIn verifies credentials and issues a session token.
 //
 // The account must be verified. An inactive account may still be logged in.
-// A wrong password or unknown email wraps ErrBadLogin. An unverified account wraps ErrUnverified.
-func (s *AuthenticationService) Login(ctx context.Context, userEmail, password string) (string, error) {
+// A wrong password or unknown email wraps ErrBadSignIn. An unverified account wraps ErrUnverified.
+func (s *AuthenticationService) SignIn(ctx context.Context, userEmail, password string) (string, error) {
 	normalized, err := normalizeEmail(userEmail)
 	if err != nil {
 		return "", err
@@ -176,13 +174,13 @@ func (s *AuthenticationService) Login(ctx context.Context, userEmail, password s
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Prevent timing attacks
 			checkPassword([]byte(password), dummySalt, dummyHash)
-			return "", ErrBadLogin
+			return "", ErrBadSignIn
 		}
 		return "", err
 	}
 
 	if !checkPassword([]byte(password), user.Salt, user.PasswordHash) {
-		return "", ErrBadLogin
+		return "", ErrBadSignIn
 	}
 
 	raw, tokenHash := generateToken()

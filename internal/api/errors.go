@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/hmcalister/Cirrus/internal/authentication"
@@ -20,7 +21,7 @@ var (
 // Maps an authentication error to the status and message shown to the user.
 func authErrorStatus(err error) (int, string) {
 	switch {
-	case errors.Is(err, authentication.ErrBadLogin):
+	case errors.Is(err, authentication.ErrBadSignIn):
 		return http.StatusUnauthorized, "Incorrect email or password"
 	case errors.Is(err, authentication.ErrEmailTaken):
 		return http.StatusConflict, "An account with that email already exists"
@@ -37,6 +38,6 @@ func authErrorStatus(err error) (int, string) {
 	case errors.Is(err, ErrUnauthorized):
 		return http.StatusUnauthorized, "Sign in to continue"
 	default:
-		return http.StatusInternalServerError, "Something went wrong. Try again."
+		return http.StatusInternalServerError, fmt.Sprintf("Something went wrong. Error %s", err)
 	}
 }

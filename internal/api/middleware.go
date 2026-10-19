@@ -18,7 +18,7 @@ func (s *Server) RequireAuth(next http.Handler) http.Handler {
 		userEmail, ok := s.AuthService.SessionEmail(r.Context(), raw)
 		if !ok {
 			slog.Warn("attempt to reach authentication route without cookie", "request_context", r.Context())
-			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			http.Redirect(w, r, "/sign-in", http.StatusSeeOther)
 			return
 		}
 

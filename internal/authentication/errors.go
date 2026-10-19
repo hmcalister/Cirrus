@@ -6,7 +6,7 @@ import (
 
 var (
 	ErrBadToken        = errors.New("invalid or expired token")
-	ErrBadLogin        = errors.New("incorrect email or password")
+	ErrBadSignIn       = errors.New("incorrect email or password")
 	ErrAlreadyVerified = errors.New("email already verified")
 	ErrEmailTaken      = errors.New("email already registered")
 	ErrInvalidEmail    = errors.New("invalid email")

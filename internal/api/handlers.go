@@ -14,7 +14,7 @@ const (
 
 // Page data for rendering templates
 
-type loginPageData struct{}
+type signInPageData struct{}
 
 type registerPageData struct{}
 
@@ -23,6 +23,9 @@ type accountPageData struct {
 	Active   bool
 	Verified bool
 }
+
+// Data for the account_status fragment returned after a setActive POST. It
+// carries the inline message and the new Active value so the OOB region swaps.
 type accountStatusFragment struct {
 	Kind    string
 	Message string
@@ -44,8 +47,8 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 
 // Page routes
 
-func (s *Server) handleLoginPage(w http.ResponseWriter, _ *http.Request) {
-	s.renderPage(w, template.TemplatePageLogin, loginPageData{})
+func (s *Server) handleSignInPage(w http.ResponseWriter, _ *http.Request) {
+	s.renderPage(w, template.TemplatePageSignIn, signInPageData{})
 }
 
 func (s *Server) handleRegisterPage(w http.ResponseWriter, _ *http.Request) {
@@ -91,7 +94,7 @@ func (s *Server) handleAccountPage(w http.ResponseWriter, r *http.Request) {
 
 // POST routes
 
-// Burns the token from the email link and redirects to the login page.
+// Burns the token from the email link and redirects to the sign in page.
 func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	rawToken := r.URL.Query().Get("token")
 
@@ -99,25 +102,25 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Warn("error when checking account verified", "request_context", r.Context(), "err", err)
 		status, message := authErrorStatus(err)
-		s.renderFragment(w, status, "login_error", errorFragment(message))
+		s.renderFragment(w, status, "sign_in_error", errorFragment(message))
 		return
 	}
 
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	http.Redirect(w, r, "/sign-in", http.StatusSeeOther)
 }
 
-func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSignIn(w http.ResponseWriter, r *http.Request) {
 	userEmail := formValue(r, "email")
 	password := r.PostFormValue("password")
 
-	rawToken, err := s.AuthService.Login(r.Context(), userEmail, password)
+	rawToken, err := s.AuthService.SignIn(r.Context(), userEmail, password)
 	if err != nil {
-		slog.Warn("login failed", "request_context", r.Context(), "email_hash", hashEmail(userEmail))
-		s.renderAuthError(w, "login_error", err)
+		slog.Warn("sign in failed", "request_context", r.Context(), "email_hash", hashEmail(userEmail))
+		s.renderAuthError(w, "sign_in_error", err)
 		return
 	}
 
-	slog.Info("login succeeded", "request_context", r.Context(), "email_hash", hashEmail(userEmail))
+	slog.Info("sign in succeeded", "request_context", r.Context(), "email_hash", hashEmail(userEmail))
 	s.setSessionCookie(w, rawToken)
 	writeHXRedirect(w, "/account")
 }
@@ -133,12 +136,12 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("account registered", "request_id", requestIDFromContext(r.Context()), "email_hash", hashEmail(userEmail))
-	writeHXRedirect(w, "/login")
+	writeHXRedirect(w, "/sign-in")
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, _ *http.Request) {
 	s.clearSessionCookie(w)
-	writeHXRedirect(w, "/login")
+	writeHXRedirect(w, "/sign-in")
 }
 
 // Requests a reset email.
@@ -168,7 +171,7 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("password reset confirmed", "request_id", requestIDFromContext(r.Context()))
-	writeHXRedirect(w, "/login")
+	writeHXRedirect(w, "/sign-in")
 }
 
 // Resends the verification email.
@@ -213,7 +216,12 @@ func (s *Server) handleSetActive(w http.ResponseWriter, r *http.Request) {
 	if activeStatus {
 		message = "Daily emails resumed."
 	}
-	s.renderFragment(w, http.StatusOK, "account_status", accountStatusFragment{
+	slog.Info("account active status changed",
+		"request_id", requestIDFromContext(r.Context()),
+		"email_hash", hashEmail(userEmail),
+		"active", activeStatus,
+	)
+	s.renderFragment(w, http.StatusOK, "account_active_status", accountStatusFragment{
 		Kind:    "status",
 		Message: message,
 		Active:  activeStatus,
@@ -231,5 +239,5 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 
 	s.clearSessionCookie(w)
 	slog.Info("account deleted", "request_id", requestIDFromContext(r.Context()), "email_hash", hashEmail(userEmail))
-	writeHXRedirect(w, "/login")
+	writeHXRedirect(w, "/sign-in")
 }

@@ -27,8 +27,8 @@ type stubAuthService struct {
 	active          bool
 	verified        bool
 	err             error
-	loginToken      string
-	loginErr        error
+	signInToken     string
+	signInErr       error
 	verifyResult    bool
 	verifyErr       error
 	lastEmail       string
@@ -55,9 +55,9 @@ func (s *stubAuthService) Verify(_ context.Context, rawToken string) (bool, erro
 	return s.verifyResult, s.verifyErr
 }
 
-func (s *stubAuthService) Login(_ context.Context, userEmail, password string) (string, error) {
+func (s *stubAuthService) SignIn(_ context.Context, userEmail, password string) (string, error) {
 	s.lastEmail, s.lastPassword = userEmail, password
-	return s.loginToken, s.loginErr
+	return s.signInToken, s.signInErr
 }
 
 func (s *stubAuthService) ResendVerification(_ context.Context, userEmail string) error {
@@ -191,11 +191,11 @@ func TestPostErrorsRenderFragmentWithStatus(t *testing.T) {
 		status   int
 	}{
 		{
-			name:     "bad login",
-			path:     "/login",
+			name:     "bad sign in",
+			path:     "/sign-in",
 			form:     url.Values{"email": {testEmail}, "password": {testPassword}},
-			authErr:  authentication.ErrBadLogin,
-			template: "login_error",
+			authErr:  authentication.ErrBadSignIn,
+			template: "sign_in_error",
 			status:   http.StatusUnauthorized,
 		},
 		{
@@ -250,7 +250,7 @@ func TestPostErrorsRenderFragmentWithStatus(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			auth := &stubAuthService{err: tc.authErr, loginErr: tc.authErr, sessionEmail: testEmail, sessionOK: true}
+			auth := &stubAuthService{err: tc.authErr, signInErr: tc.authErr, sessionEmail: testEmail, sessionOK: true}
 			server := newTestServer(t, auth)
 
 			var recorder *httptest.ResponseRecorder
@@ -285,10 +285,10 @@ func TestPostSuccessRedirects(t *testing.T) {
 		location string
 	}{
 		{
-			name:     "login",
-			path:     "/login",
+			name:     "sign in",
+			path:     "/sign-in",
 			form:     url.Values{"email": {testEmail}, "password": {testPassword}},
-			auth:     &stubAuthService{loginToken: testToken},
+			auth:     &stubAuthService{signInToken: testToken},
 			location: "/account",
 		},
 		{
@@ -296,28 +296,28 @@ func TestPostSuccessRedirects(t *testing.T) {
 			path:     "/register",
 			form:     url.Values{"email": {testEmail}, "password": {testPassword}},
 			auth:     &stubAuthService{},
-			location: "/login",
+			location: "/sign-in",
 		},
 		{
 			name:     "logout",
 			path:     "/logout",
 			form:     nil,
 			auth:     &stubAuthService{},
-			location: "/login",
+			location: "/sign-in",
 		},
 		{
 			name:     "reset",
 			path:     "/reset",
 			form:     url.Values{"token": {testToken}, "password": {testPassword}},
 			auth:     &stubAuthService{},
-			location: "/login",
+			location: "/sign-in",
 		},
 		{
 			name:     "account delete",
 			path:     "/account/delete",
 			form:     nil,
 			auth:     &stubAuthService{sessionEmail: testEmail, sessionOK: true},
-			location: "/login",
+			location: "/sign-in",
 		},
 	}
 
@@ -365,8 +365,8 @@ func TestSetActiveSwapsStatusFragment(t *testing.T) {
 			if got := recorder.Header().Get("HX-Redirect"); got != "" {
 				t.Errorf("setActive must not redirect; HX-Redirect = %q", got)
 			}
-			if !strings.Contains(recorder.Body.String(), "account_status") {
-				t.Errorf("body %q does not reference account_status", recorder.Body.String())
+			if !strings.Contains(recorder.Body.String(), "account_active_status") {
+				t.Errorf("body %q does not reference account_active_status", recorder.Body.String())
 			}
 			if got := auth.activeEmails[testEmail]; got != tc.wantState {
 				t.Errorf("SetAccountActive(%v) recorded, want %v", got, tc.wantState)
@@ -375,11 +375,11 @@ func TestSetActiveSwapsStatusFragment(t *testing.T) {
 	}
 }
 
-func TestLoginSetsSessionCookie(t *testing.T) {
-	auth := &stubAuthService{loginToken: testToken}
+func TestSignInSetsSessionCookie(t *testing.T) {
+	auth := &stubAuthService{signInToken: testToken}
 	server := newTestServer(t, auth)
 
-	recorder := postForm(t, server, "/login", url.Values{"email": {testEmail}, "password": {testPassword}})
+	recorder := postForm(t, server, "/sign-in", url.Values{"email": {testEmail}, "password": {testPassword}})
 	cookie := sessionCookie(t, recorder)
 
 	if cookie.Value != testToken {
@@ -447,8 +447,8 @@ func TestRequireAuthRedirectsAnonymous(t *testing.T) {
 			if recorder.Code != http.StatusSeeOther {
 				t.Errorf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
 			}
-			if got := recorder.Header().Get("Location"); got != "/login" {
-				t.Errorf("Location = %q, want /login", got)
+			if got := recorder.Header().Get("Location"); got != "/sign-in" {
+				t.Errorf("Location = %q, want /sign-in", got)
 			}
 		})
 	}
@@ -501,7 +501,7 @@ func TestVerifyResendStatusDoesNotLeakExistence(t *testing.T) {
 	}
 }
 
-func TestVerifyRedirectsToLogin(t *testing.T) {
+func TestVerifyRedirectsToSignIn(t *testing.T) {
 	server := newTestServer(t, &stubAuthService{verifyResult: true})
 
 	request := httptest.NewRequest(http.MethodGet, "/verify?token="+testToken, nil)
@@ -511,8 +511,8 @@ func TestVerifyRedirectsToLogin(t *testing.T) {
 	if recorder.Code != http.StatusSeeOther {
 		t.Errorf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
 	}
-	if got := recorder.Header().Get("Location"); got != "/login" {
-		t.Errorf("Location = %q, want /login", got)
+	if got := recorder.Header().Get("Location"); got != "/sign-in" {
+		t.Errorf("Location = %q, want /sign-in", got)
 	}
 }
 
@@ -526,8 +526,8 @@ func TestVerifyBadTokenShowsError(t *testing.T) {
 	if recorder.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
 	}
-	if !strings.Contains(recorder.Body.String(), "login_error") {
-		t.Errorf("body %q does not reference login_error", recorder.Body.String())
+	if !strings.Contains(recorder.Body.String(), "sign_in_error") {
+		t.Errorf("body %q does not reference sign_in_error", recorder.Body.String())
 	}
 }
 

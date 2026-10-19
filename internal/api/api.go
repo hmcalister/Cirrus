@@ -15,7 +15,7 @@ import (
 type authService interface {
 	Register(ctx context.Context, userEmail, password string) error
 	Verify(ctx context.Context, rawToken string) (bool, error)
-	Login(ctx context.Context, userEmail, password string) (string, error)
+	SignIn(ctx context.Context, userEmail, password string) (string, error)
 	ResendVerification(ctx context.Context, userEmail string) error
 	RequestPasswordReset(ctx context.Context, userEmail string) error
 	ConfirmPasswordReset(ctx context.Context, rawToken, newPassword string) error
@@ -61,14 +61,14 @@ func (s *Server) Routes() http.Handler {
 
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 
-	mux.HandleFunc("GET /login", s.handleLoginPage)
+	mux.HandleFunc("GET /sign-in", s.handleSignInPage)
 	mux.HandleFunc("GET /register", s.handleRegisterPage)
 	mux.HandleFunc("GET /reset", s.handleResetPage)
 	mux.HandleFunc("GET /verify", s.handleVerify)
 	mux.HandleFunc("GET /password/reset", s.handlePasswordResetRequestPage)
 	mux.HandleFunc("GET /verify/resend", s.handleVerifyResendPage)
 
-	mux.HandleFunc("POST /login", s.handleLogin)
+	mux.HandleFunc("POST /sign-in", s.handleSignIn)
 	mux.HandleFunc("POST /register", s.handleRegister)
 	mux.HandleFunc("POST /logout", s.handleLogout)
 	mux.HandleFunc("POST /password/reset", s.handlePasswordResetRequest)
