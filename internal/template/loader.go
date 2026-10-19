@@ -32,7 +32,7 @@ type Loader struct {
 // Builds a template loader from the embedded FS.
 // Required templates, as defined in `internal/template/embed.go` are checked at init time.
 func New() (*Loader, error) {
-	return newLoaderInternal(FS, RequiredEmailTemplates, RequiredWebTemplates)
+	return newLoaderInternal(FS, requiredEmailTemplates, requiredWebTemplates)
 }
 
 // Internal constructor that allows setting required files. For testing.

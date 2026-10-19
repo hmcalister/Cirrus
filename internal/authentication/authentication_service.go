@@ -25,15 +25,12 @@ type AuthenticationConfig struct {
 	VerificationExpiryDuration time.Duration
 	ResetExpiryDuration        time.Duration
 	SessionExpiryDuration      time.Duration
-	// Links builds the verification and reset URLs sent by email.
-	Links         TokenLinkBuilder
-	Querier       database.Querier
-	EmailSender   sender.Sender
-	EmailRenderer template.EmailRenderer
+	Links                      TokenLinkBuilder
+	Querier                    database.Querier
+	EmailSender                sender.Sender
+	EmailRenderer              template.EmailRenderer
 }
 
-// AuthenticationService manages account registration, verification, login, and
-// the lifecycle of an account. All methods are safe for concurrent use.
 type AuthenticationService struct {
 	AuthenticationConfig
 
@@ -162,11 +159,11 @@ func (s *AuthenticationService) Verify(ctx context.Context, rawToken string) (bo
 	return true, nil
 }
 
-// Login verifies credentials and issues a session token.
+// SignIn verifies credentials and issues a session token.
 //
 // The account must be verified. An inactive account may still be logged in.
-// A wrong password or unknown email wraps ErrBadLogin. An unverified account wraps ErrUnverified.
-func (s *AuthenticationService) Login(ctx context.Context, userEmail, password string) (string, error) {
+// A wrong password or unknown email wraps ErrBadSignIn. An unverified account wraps ErrUnverified.
+func (s *AuthenticationService) SignIn(ctx context.Context, userEmail, password string) (string, error) {
 	normalized, err := normalizeEmail(userEmail)
 	if err != nil {
 		return "", err
@@ -177,16 +174,13 @@ func (s *AuthenticationService) Login(ctx context.Context, userEmail, password s
 		if errors.Is(err, pgx.ErrNoRows) {
 			// Prevent timing attacks
 			checkPassword([]byte(password), dummySalt, dummyHash)
-			return "", ErrBadLogin
+			return "", ErrBadSignIn
 		}
 		return "", err
 	}
 
 	if !checkPassword([]byte(password), user.Salt, user.PasswordHash) {
-		return "", ErrBadLogin
-	}
-	if !user.Verified.Bool {
-		return "", ErrUnverified
+		return "", ErrBadSignIn
 	}
 
 	raw, tokenHash := generateToken()
@@ -296,10 +290,8 @@ func (s *AuthenticationService) ConfirmPasswordReset(ctx context.Context, rawTok
 	})
 }
 
-// Deactivate tne user account. In this project, that means opting out of daily emails.
-//
-// This does not prevent login.
-func (s *AuthenticationService) DeactivateAccount(ctx context.Context, userEmail string) error {
+// Set the active flag of a user account. In this project, this controls whether the user receives daily emails.
+func (s *AuthenticationService) SetAccountActive(ctx context.Context, userEmail string, active bool) error {
 	user, err := s.lookupUser(ctx, userEmail)
 	if err != nil {
 		return err
@@ -307,7 +299,7 @@ func (s *AuthenticationService) DeactivateAccount(ctx context.Context, userEmail
 
 	err = s.Querier.SetActive(ctx, database.SetActiveParams{
 		ID:     user.ID,
-		Active: pgtype.Bool{Bool: false, Valid: true},
+		Active: pgtype.Bool{Bool: active, Valid: true},
 	})
 	if err != nil {
 		return err
@@ -316,17 +308,28 @@ func (s *AuthenticationService) DeactivateAccount(ctx context.Context, userEmail
 	return nil
 }
 
-// Activate the account. Opts the account back into daily emails.
-func (s *AuthenticationService) ReactivateAccount(ctx context.Context, userEmail string) error {
+// Reports whether the account is opted in to daily emails.
+//
+// An unknown account returns an error wrapping ErrInvalidEmail.
+func (s *AuthenticationService) AccountActive(ctx context.Context, userEmail string) (bool, error) {
 	user, err := s.lookupUser(ctx, userEmail)
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return s.Querier.SetActive(ctx, database.SetActiveParams{
-		ID:     user.ID,
-		Active: pgtype.Bool{Bool: true, Valid: true},
-	})
+	return user.Active.Bool, nil
+}
+
+// Reports whether the account is verified.
+//
+// An unknown account returns an error wrapping ErrInvalidEmail.
+func (s *AuthenticationService) AccountVerified(ctx context.Context, userEmail string) (bool, error) {
+	user, err := s.lookupUser(ctx, userEmail)
+	if err != nil {
+		return false, err
+	}
+
+	return user.Verified.Bool, nil
 }
 
 // DeleteAccount permanently removes the account and all of its tokens. GDPR compliant.

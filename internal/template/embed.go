@@ -17,8 +17,9 @@ var FS embed.FS
 
 // Template directories within FS.
 const (
-	emailDir = "email"
-	webDir   = "web"
+	emailDir     = "email"
+	webDir       = "web"
+	WebStaticDir = webDir + "/static"
 	// Template file pattern accepted in template directory.
 	templatePattern = "*.tmpl"
 )
@@ -28,12 +29,32 @@ const (
 const (
 	TemplateVerification  = "verification.tmpl"
 	TemplatePasswordReset = "password_reset.tmpl"
+
+	TemplatePageSignIn               = "sign_in.tmpl"
+	TemplatePageRegister             = "register.tmpl"
+	TemplatePageAccount              = "account.tmpl"
+	TemplatePageReset                = "reset.tmpl"
+	TemplatePagePasswordResetRequest = "password_reset_request.tmpl"
+	TemplatePageVerifyResend         = "verify_resend.tmpl"
+	templateMessageFragment          = "message.tmpl"
+	templateLayout                   = "layout.tmpl"
+	templateAccountStatus            = "account_status.tmpl"
 )
 
 var (
-	RequiredEmailTemplates = []string{
+	requiredEmailTemplates = []string{
 		TemplateVerification,
 		TemplatePasswordReset,
 	}
-	RequiredWebTemplates = []string{}
+	requiredWebTemplates = []string{
+		TemplatePageSignIn,
+		TemplatePageRegister,
+		TemplatePageAccount,
+		TemplatePageReset,
+		TemplatePagePasswordResetRequest,
+		TemplatePageVerifyResend,
+		templateMessageFragment,
+		templateLayout,
+		templateAccountStatus,
+	}
 )

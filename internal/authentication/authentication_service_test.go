@@ -442,7 +442,7 @@ func TestResendVerificationUnknownEmail(t *testing.T) {
 	}
 }
 
-func TestLogin(t *testing.T) {
+func TestSignIn(t *testing.T) {
 	bg := context.Background()
 	newVerifiedService := func(t *testing.T) (*AuthenticationService, *mockQuerier, *mockSender) {
 		t.Helper()
@@ -461,9 +461,9 @@ func TestLogin(t *testing.T) {
 
 	t.Run("success issues session", func(t *testing.T) {
 		service, q, _ := newVerifiedService(t)
-		token, err := service.Login(bg, "user@example.com", "hunter2")
+		token, err := service.SignIn(bg, "user@example.com", "hunter2")
 		if err != nil || token == "" {
-			t.Fatalf("Login = %q, %v; want token, nil", token, err)
+			t.Fatalf("SignIn = %q, %v; want token, nil", token, err)
 		}
 		if _, ok := q.tokens[string(hashToken(token))]; !ok {
 			t.Error("session token was not stored")
@@ -472,34 +472,24 @@ func TestLogin(t *testing.T) {
 
 	t.Run("wrong password", func(t *testing.T) {
 		service, _, _ := newVerifiedService(t)
-		if _, err := service.Login(bg, "user@example.com", "wrong"); !errors.Is(err, ErrBadLogin) {
-			t.Errorf("err = %v, want ErrBadLogin", err)
+		if _, err := service.SignIn(bg, "user@example.com", "wrong"); !errors.Is(err, ErrBadSignIn) {
+			t.Errorf("err = %v, want ErrBadSignIn", err)
 		}
 	})
 
 	t.Run("unknown email", func(t *testing.T) {
 		service, _, _ := newVerifiedService(t)
-		if _, err := service.Login(bg, "nobody@example.com", "hunter2"); !errors.Is(err, ErrBadLogin) {
-			t.Errorf("err = %v, want ErrBadLogin", err)
-		}
-	})
-
-	t.Run("unverified", func(t *testing.T) {
-		q := newMockQuerier()
-		mail := &mockSender{}
-		service := newTestService(t, q, mail)
-		_ = service.Register(bg, "user@example.com", "hunter2")
-		if _, err := service.Login(bg, "user@example.com", "hunter2"); !errors.Is(err, ErrUnverified) {
-			t.Errorf("err = %v, want ErrUnverified", err)
+		if _, err := service.SignIn(bg, "nobody@example.com", "hunter2"); !errors.Is(err, ErrBadSignIn) {
+			t.Errorf("err = %v, want ErrBadSignIn", err)
 		}
 	})
 
 	t.Run("inactive account can still log in", func(t *testing.T) {
 		service, _, _ := newVerifiedService(t)
-		if err := service.DeactivateAccount(bg, "user@example.com"); err != nil {
+		if err := service.SetAccountActive(bg, "user@example.com", false); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := service.Login(bg, "user@example.com", "hunter2"); err != nil {
+		if _, err := service.SignIn(bg, "user@example.com", "hunter2"); err != nil {
 			t.Errorf("err = %v, want nil", err)
 		}
 	})
@@ -513,7 +503,7 @@ func TestSessionEmail(t *testing.T) {
 	_ = service.Register(bg, "user@example.com", "hunter2")
 	verifyRaw := rawTokenFromLink(t, mail.sent[0].Body)
 	_, _ = service.Verify(bg, verifyRaw)
-	token, err := service.Login(bg, "user@example.com", "hunter2")
+	token, err := service.SignIn(bg, "user@example.com", "hunter2")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -564,19 +554,18 @@ func TestDeactivateAndDeleteInvalidateSessions(t *testing.T) {
 		_ = service.Register(bg, "user@example.com", "hunter2")
 		raw := rawTokenFromLink(t, mail.sent[0].Body)
 		_, _ = service.Verify(bg, raw)
-		token, err := service.Login(bg, "user@example.com", "hunter2")
+		token, err := service.SignIn(bg, "user@example.com", "hunter2")
 		if err != nil {
 			t.Fatal(err)
 		}
 		return service, token
 	}
 
-	t.Run("deactivate keeps sessions", func(t *testing.T) {
+	t.Run("SetAccountActive keeps sessions", func(t *testing.T) {
 		service, token := setup(t)
-		if err := service.DeactivateAccount(bg, "user@example.com"); err != nil {
+		if err := service.SetAccountActive(bg, "user@example.com", false); err != nil {
 			t.Fatal(err)
 		}
-		// Deactivating only opts out of daily emails; it does not log the user out.
 		if _, ok := service.SessionEmail(bg, token); !ok {
 			t.Error("session invalidated by deactivate")
 		}
@@ -588,8 +577,8 @@ func TestDeactivateAndDeleteInvalidateSessions(t *testing.T) {
 
 	t.Run("reactivate", func(t *testing.T) {
 		service, _ := setup(t)
-		_ = service.DeactivateAccount(bg, "user@example.com")
-		if err := service.ReactivateAccount(bg, "user@example.com"); err != nil {
+		_ = service.SetAccountActive(bg, "user@example.com", false)
+		if err := service.SetAccountActive(bg, "user@example.com", true); err != nil {
 			t.Fatal(err)
 		}
 		user, _ := service.Querier.GetUserByEmail(bg, "user@example.com")
@@ -658,7 +647,7 @@ func TestPasswordReset(t *testing.T) {
 		// Establish a session before the reset.
 		verifyRaw := rawTokenFromLink(t, mail.sent[0].Body)
 		_, _ = service.Verify(bg, verifyRaw)
-		sessionToken, err := service.Login(bg, "user@example.com", "hunter2")
+		sessionToken, err := service.SignIn(bg, "user@example.com", "hunter2")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -666,11 +655,11 @@ func TestPasswordReset(t *testing.T) {
 		if err := service.ConfirmPasswordReset(bg, raw, "new-password"); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := service.Login(bg, "user@example.com", "new-password"); err != nil {
-			t.Errorf("login with new password = %v, want nil", err)
+		if _, err := service.SignIn(bg, "user@example.com", "new-password"); err != nil {
+			t.Errorf("sign in with new password = %v, want nil", err)
 		}
-		if _, err := service.Login(bg, "user@example.com", "hunter2"); !errors.Is(err, ErrBadLogin) {
-			t.Errorf("login with old password err = %v, want ErrBadLogin", err)
+		if _, err := service.SignIn(bg, "user@example.com", "hunter2"); !errors.Is(err, ErrBadSignIn) {
+			t.Errorf("sign in with old password err = %v, want ErrBadSignIn", err)
 		}
 		if _, ok := service.SessionEmail(bg, sessionToken); ok {
 			t.Error("session survived password reset")

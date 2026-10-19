@@ -1,0 +1,17 @@
+{{define "register_error"}}{{template "message" .}}{{end}}
+{{template "page_top" "Create account"}}
+		<h1>Create an account</h1>
+		<p class="lede">Start receiving your daily emails with Cirrus.</p>
+		<form hx-post="/register" hx-disabled="find button" hx-target="#status">
+			{{template "email_field"}}
+			<label>
+				Password
+				<input type="password" name="password" autocomplete="new-password" required>
+			</label>
+			<button type="submit">Create account</button>
+		</form>
+		{{template "status"}}
+		<div class="meta">
+			<p>Already have an account? <a href="/sign-in">Sign in</a></p>
+		</div>
+{{template "page_bottom"}}
