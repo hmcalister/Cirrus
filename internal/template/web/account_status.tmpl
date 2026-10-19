@@ -1,0 +1,35 @@
+{{/* Shared account sections. */}}
+
+{{define "account_unverified"}}
+<section class="setting" id="account-verified" hx-swap-oob="true">
+	<div class="setting-row">
+		<div>
+			<h2>Account unverified</h2>
+			<p>Your account is unverified. Resend the verification email to start receiving daily emails.</p>
+		</div>
+	</div>
+	<form hx-post="/verify/resend" hx-target="#status" hx-disabled="find button">
+		<input type="hidden" name="email" value="{{.Email}}">
+		<button type="submit" class="secondary">Resend verification email</button>
+	</form>
+</section>
+{{end}}
+
+{{define "account_active"}}
+<section class="setting" id="account-active" hx-swap-oob="true">
+	<div class="setting-row">
+		<span>
+			<h2>Daily emails</h2>
+			<p>{{if .Active}}Emails are being delivered to your inbox.{{else}}Delivery is currently paused.{{end}}</p>
+		</span>
+		<span class="badge{{if not .Active}} paused{{end}}">{{if .Active}}Active{{else}}Paused{{end}}</span>
+	</div>
+	<form hx-post="/account/setActive" hx-target="#status" hx-disabled="find button">
+		<input type="hidden" name="activeStatus" value="{{not .Active}}">
+		<button type="submit" class="secondary">{{if .Active}}Pause emails{{else}}Resume emails{{end}}</button>
+	</form>
+</section>
+{{end}}
+
+{{define "account_active_status"}}{{template "message" .}}
+{{template "account_active" .}}{{end}}

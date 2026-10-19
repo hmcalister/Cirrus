@@ -1,0 +1,12 @@
+{{define "verify_resend_status"}}{{template "message" .}}{{end}}
+{{template "page_top" "Resend verification"}}
+		<h1>Resend verification</h1>
+		<form hx-post="/verify/resend" hx-target="#status">
+			{{template "email_field"}}
+			<button type="submit">Resend verification email</button>
+		</form>
+		{{template "status"}}
+		<div class="meta">
+			<p>Already verified? <a href="/sign-in">Back to sign in</a></p>
+		</div>
+{{template "page_bottom"}}
