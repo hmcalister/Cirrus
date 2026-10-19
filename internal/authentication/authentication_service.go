@@ -184,9 +184,6 @@ func (s *AuthenticationService) Login(ctx context.Context, userEmail, password s
 	if !checkPassword([]byte(password), user.Salt, user.PasswordHash) {
 		return "", ErrBadLogin
 	}
-	if !user.Verified.Bool {
-		return "", ErrUnverified
-	}
 
 	raw, tokenHash := generateToken()
 	err = s.Querier.CreateUserToken(ctx, database.CreateUserTokenParams{
@@ -323,6 +320,18 @@ func (s *AuthenticationService) AccountActive(ctx context.Context, userEmail str
 	}
 
 	return user.Active.Bool, nil
+}
+
+// Reports whether the account is verified.
+//
+// An unknown account returns an error wrapping ErrInvalidEmail.
+func (s *AuthenticationService) AccountVerified(ctx context.Context, userEmail string) (bool, error) {
+	user, err := s.lookupUser(ctx, userEmail)
+	if err != nil {
+		return false, err
+	}
+
+	return user.Verified.Bool, nil
 }
 
 // DeleteAccount permanently removes the account and all of its tokens. GDPR compliant.

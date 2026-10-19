@@ -484,16 +484,6 @@ func TestLogin(t *testing.T) {
 		}
 	})
 
-	t.Run("unverified", func(t *testing.T) {
-		q := newMockQuerier()
-		mail := &mockSender{}
-		service := newTestService(t, q, mail)
-		_ = service.Register(bg, "user@example.com", "hunter2")
-		if _, err := service.Login(bg, "user@example.com", "hunter2"); !errors.Is(err, ErrUnverified) {
-			t.Errorf("err = %v, want ErrUnverified", err)
-		}
-	})
-
 	t.Run("inactive account can still log in", func(t *testing.T) {
 		service, _, _ := newVerifiedService(t)
 		if err := service.SetAccountActive(bg, "user@example.com", false); err != nil {
