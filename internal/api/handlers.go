@@ -7,6 +7,11 @@ import (
 	"github.com/hmcalister/Cirrus/internal/template"
 )
 
+const (
+	passwordResetSentMessage  = "A reset link has been sent"
+	verificationResentMessage = "A verification link has been sent"
+)
+
 // Page data for rendering templates
 
 type loginPageData struct{}
