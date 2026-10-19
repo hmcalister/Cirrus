@@ -22,6 +22,7 @@ type authService interface {
 	DeleteAccount(ctx context.Context, userEmail string) error
 	SessionEmail(ctx context.Context, rawToken string) (string, bool)
 	AccountActive(ctx context.Context, userEmail string) (bool, error)
+	AccountVerified(ctx context.Context, userEmail string) (bool, error)
 }
 
 var _ authService = (*authentication.AuthenticationService)(nil)

@@ -25,8 +25,6 @@ func authErrorStatus(err error) (int, string) {
 	switch {
 	case errors.Is(err, authentication.ErrBadLogin):
 		return http.StatusUnauthorized, "Incorrect email or password."
-	case errors.Is(err, authentication.ErrUnverified):
-		return http.StatusForbidden, "Verify your email before signing in."
 	case errors.Is(err, authentication.ErrEmailTaken):
 		return http.StatusConflict, "An account with that email already exists."
 	case errors.Is(err, authentication.ErrAlreadyVerified):

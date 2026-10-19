@@ -25,6 +25,7 @@ type stubAuthService struct {
 	sessionEmail    string
 	sessionOK       bool
 	active          bool
+	verified        bool
 	err             error
 	loginToken      string
 	loginErr        error
@@ -93,6 +94,10 @@ func (s *stubAuthService) SessionEmail(_ context.Context, _ string) (string, boo
 
 func (s *stubAuthService) AccountActive(_ context.Context, _ string) (bool, error) {
 	return s.active, nil
+}
+
+func (s *stubAuthService) AccountVerified(_ context.Context, _ string) (bool, error) {
+	return s.verified, nil
 }
 
 // Stub page renderer. Produces a body derived from the template name and data
@@ -192,14 +197,6 @@ func TestPostErrorsRenderFragmentWithStatus(t *testing.T) {
 			authErr:  authentication.ErrBadLogin,
 			template: "login_error",
 			status:   http.StatusUnauthorized,
-		},
-		{
-			name:     "unverified login",
-			path:     "/login",
-			form:     url.Values{"email": {testEmail}, "password": {testPassword}},
-			authErr:  authentication.ErrUnverified,
-			template: "login_error",
-			status:   http.StatusForbidden,
 		},
 		{
 			name:     "register email taken",

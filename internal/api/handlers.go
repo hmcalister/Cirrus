@@ -14,8 +14,9 @@ type loginPageData struct{}
 type registerPageData struct{}
 
 type accountPageData struct {
-	Email  string
-	Active bool
+	Email    string
+	Active   bool
+	Verified bool
 }
 type accountStatusFragment struct {
 	Kind    string
@@ -71,8 +72,13 @@ func (s *Server) handleAccountPage(w http.ResponseWriter, r *http.Request) {
 		writePage(w, http.StatusInternalServerError, genericErrorMessage)
 		return
 	}
+	verified, err := s.AuthService.AccountVerified(r.Context(), userEmail)
+	if err != nil {
+		writePage(w, http.StatusInternalServerError, genericErrorMessage)
+		return
+	}
 
-	s.renderPage(w, template.TemplatePageAccount, accountPageData{Email: userEmail, Active: active})
+	s.renderPage(w, template.TemplatePageAccount, accountPageData{Email: userEmail, Active: active, Verified: verified})
 }
 
 // POST routes
