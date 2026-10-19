@@ -29,6 +29,16 @@ const (
 const (
 	TemplateVerification  = "verification.tmpl"
 	TemplatePasswordReset = "password_reset.tmpl"
+
+	TemplatePageSignIn               = "sign_in.tmpl"
+	TemplatePageRegister             = "register.tmpl"
+	TemplatePageAccount              = "account.tmpl"
+	TemplatePageReset                = "reset.tmpl"
+	TemplatePagePasswordResetRequest = "password_reset_request.tmpl"
+	TemplatePageVerifyResend         = "verify_resend.tmpl"
+	templateMessageFragment          = "message.tmpl"
+	templateLayout                   = "layout.tmpl"
+	templateAccountStatus            = "account_status.tmpl"
 )
 
 var (
@@ -37,4 +47,14 @@ var (
 		TemplatePasswordReset,
 	}
 	requiredWebTemplates = []string{
+		TemplatePageSignIn,
+		TemplatePageRegister,
+		TemplatePageAccount,
+		TemplatePageReset,
+		TemplatePagePasswordResetRequest,
+		TemplatePageVerifyResend,
+		templateMessageFragment,
+		templateLayout,
+		templateAccountStatus,
+	}
 )
