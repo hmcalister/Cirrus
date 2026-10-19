@@ -69,11 +69,14 @@ func (s *Server) handleAccountPage(w http.ResponseWriter, r *http.Request) {
 
 	active, err := s.AuthService.AccountActive(r.Context(), userEmail)
 	if err != nil {
+		slog.Warn("error when checking account active", "request_context", r.Context(), "err", err)
 		writePage(w, http.StatusInternalServerError, genericErrorMessage)
 		return
 	}
+
 	verified, err := s.AuthService.AccountVerified(r.Context(), userEmail)
 	if err != nil {
+		slog.Warn("error when checking account verified", "err", err)
 		writePage(w, http.StatusInternalServerError, genericErrorMessage)
 		return
 	}
@@ -89,6 +92,7 @@ func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
 
 	_, err := s.AuthService.Verify(r.Context(), rawToken)
 	if err != nil {
+		slog.Warn("error when checking account verified", "request_context", r.Context(), "err", err)
 		status, message := authErrorStatus(err)
 		s.renderFragment(w, status, "login_error", errorFragment(message))
 		return
@@ -103,12 +107,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	rawToken, err := s.AuthService.Login(r.Context(), userEmail, password)
 	if err != nil {
-		slog.Info("login failed", "request_id", requestIDFromContext(r.Context()), "email_hash", hashEmail(userEmail))
+		slog.Warn("login failed", "request_context", r.Context(), "email_hash", hashEmail(userEmail))
 		s.renderAuthError(w, "login_error", err)
 		return
 	}
 
-	slog.Info("login succeeded", "request_id", requestIDFromContext(r.Context()), "email_hash", hashEmail(userEmail))
+	slog.Info("login succeeded", "request_context", r.Context(), "email_hash", hashEmail(userEmail))
 	s.setSessionCookie(w, rawToken)
 	writeHXRedirect(w, "/account")
 }
@@ -118,6 +122,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	password := r.PostFormValue("password")
 
 	if err := s.AuthService.Register(r.Context(), userEmail, password); err != nil {
+		slog.Warn("error when registering account", "request_context", r.Context(), "err", err)
 		s.renderAuthError(w, "register_error", err)
 		return
 	}
@@ -138,6 +143,7 @@ func (s *Server) handlePasswordResetRequest(w http.ResponseWriter, r *http.Reque
 	userEmail := formValue(r, "email")
 
 	if err := s.AuthService.RequestPasswordReset(r.Context(), userEmail); err != nil {
+		slog.Warn("error when requesting password reset", "request_context", r.Context(), "err", err)
 		s.renderAuthError(w, "password_reset_status", err)
 		return
 	}
@@ -151,6 +157,7 @@ func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
 	password := r.PostFormValue("password")
 
 	if err := s.AuthService.ConfirmPasswordReset(r.Context(), rawToken, password); err != nil {
+		slog.Warn("error when handling password reset", "request_context", r.Context(), "err", err)
 		s.renderAuthError(w, "reset_error", err)
 		return
 	}
@@ -166,6 +173,7 @@ func (s *Server) handleVerifyResend(w http.ResponseWriter, r *http.Request) {
 	userEmail := formValue(r, "email")
 
 	if err := s.AuthService.ResendVerification(r.Context(), userEmail); err != nil {
+		slog.Warn("error when resending verification email", "request_context", r.Context(), "err", err)
 		s.renderAuthError(w, "verify_resend_status", err)
 		return
 	}
@@ -178,12 +186,14 @@ func (s *Server) handleSetActive(w http.ResponseWriter, r *http.Request) {
 	userEmail := emailFromContext(r.Context())
 	activeStatusFormValue := r.PostFormValue("activeStatus")
 	if activeStatusFormValue != "true" && activeStatusFormValue != "false" {
+		slog.Warn("set active request sent with bad value", "request_context", r.Context(), "activeStatusFormValue", activeStatusFormValue)
 		s.renderFragment(w, http.StatusBadRequest, "account_error", errorFragment("invalid active status."))
 		return
 	}
 
 	activeStatus := activeStatusFormValue == "true"
 	if err := s.AuthService.SetAccountActive(r.Context(), userEmail, activeStatus); err != nil {
+		slog.Warn("error when setting account active", "request_context", r.Context(), "err", err)
 		s.renderAuthError(w, "account_error", err)
 		return
 	}
@@ -209,6 +219,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	userEmail := emailFromContext(r.Context())
 
 	if err := s.AuthService.DeleteAccount(r.Context(), userEmail); err != nil {
+		slog.Warn("error when deleting account", "request_context", r.Context(), "err", err)
 		s.renderAuthError(w, "account_error", err)
 		return
 	}

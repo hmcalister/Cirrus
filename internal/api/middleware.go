@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 )
 
@@ -16,6 +17,7 @@ func (s *Server) RequireAuth(next http.Handler) http.Handler {
 		raw := sessionToken(r, authenticationCookieName)
 		userEmail, ok := s.AuthService.SessionEmail(r.Context(), raw)
 		if !ok {
+			slog.Warn("attempt to reach authentication route without cookie", "request_context", r.Context())
 			http.Redirect(w, r, "/login", http.StatusSeeOther)
 			return
 		}

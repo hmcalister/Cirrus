@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -90,6 +91,7 @@ func (s *Server) Routes() http.Handler {
 func (s *Server) renderPage(w http.ResponseWriter, templateName string, data any) {
 	body, err := s.PagesRenderer.RenderPage(templateName, data)
 	if err != nil {
+		slog.Error("error while rendering page", "template", templateName, "data", data, "err", err)
 		writePage(w, http.StatusInternalServerError, genericErrorMessage)
 		return
 	}
@@ -144,5 +146,6 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 // Renders err as the named error fragment with its mapped status.
 func (s *Server) renderAuthError(w http.ResponseWriter, templateName string, err error) {
 	status, message := authErrorStatus(err)
+	slog.Warn("authentication error encountered", "err", err, "message", message)
 	s.renderFragment(w, status, templateName, errorFragment(message))
 }
