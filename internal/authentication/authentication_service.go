@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/hmcalister/Cirrus/internal/database"
-	"github.com/hmcalister/Cirrus/internal/email/sender"
 	"github.com/hmcalister/Cirrus/internal/template"
+	"github.com/hmcalister/skysatchel/pkg/email/skysender"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -27,7 +27,7 @@ type AuthenticationConfig struct {
 	SessionExpiryDuration      time.Duration
 	Links                      TokenLinkBuilder
 	Querier                    database.Querier
-	EmailSender                sender.Sender
+	EmailSender                skysender.Sender
 	EmailRenderer              template.EmailRenderer
 }
 
@@ -241,7 +241,7 @@ func (s *AuthenticationService) RequestPasswordReset(ctx context.Context, userEm
 		return err
 	}
 
-	return s.EmailSender.Send(ctx, sender.SendParams{
+	return s.EmailSender.Send(ctx, skysender.SendParams{
 		Subject:      "Password Reset",
 		Body:         body,
 		ToRecipients: []string{normalized},
@@ -385,7 +385,7 @@ func (s *AuthenticationService) sendVerificationEmail(ctx context.Context, userI
 		return err
 	}
 
-	return s.EmailSender.Send(ctx, sender.SendParams{
+	return s.EmailSender.Send(ctx, skysender.SendParams{
 		Subject:      "Account Verification",
 		Body:         body,
 		ToRecipients: []string{userEmail},
