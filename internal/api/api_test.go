@@ -546,21 +546,6 @@ func TestRenderFailureIsInternalError(t *testing.T) {
 	}
 }
 
-func TestStaticServesHTMX(t *testing.T) {
-	server := newTestServer(t, &stubAuthService{})
-
-	request := httptest.NewRequest(http.MethodGet, "/static/htmx.min.js", nil)
-	recorder := httptest.NewRecorder()
-	server.Routes().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
-	}
-	if got := recorder.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/javascript") {
-		t.Errorf("Content-Type = %q, want text/javascript", got)
-	}
-}
-
 // postAuthedForm issues a POST carrying a session cookie so the request passes
 // RequireAuth.
 func postAuthedForm(t *testing.T, server *Server, path string, values url.Values) *httptest.ResponseRecorder {

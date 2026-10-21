@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hmcalister/Cirrus/internal/email"
+	skysatchel "github.com/hmcalister/skysatchel/pkg/email"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -15,8 +15,8 @@ func postgresExpiryTime(now time.Time, d time.Duration) pgtype.Timestamptz {
 }
 
 func normalizeEmail(userEmail string) (string, error) {
-	normalized := email.Normalize(userEmail)
-	if _, err := email.ParseAddress(normalized); err != nil {
+	normalized := skysatchel.NormalizeEmail(userEmail)
+	if _, err := skysatchel.ParseAddress(normalized); err != nil {
 		return "", fmt.Errorf("%w: %q", ErrInvalidEmail, userEmail)
 	}
 	return normalized, nil

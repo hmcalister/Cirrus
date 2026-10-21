@@ -1,4 +1,10 @@
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/hmcalister/skysatchel v0.0.0-20261021100300-4e6c0c1b592f h1:S4w7cJKj+dVoozG4byp9+Le8aqv8/VEigjpRbX3cXv8=
+github.com/hmcalister/skysatchel v0.0.0-20261021100300-4e6c0c1b592f/go.mod h1:iSjV5pgoyKabLjvkvpwB33cr1xZrkKowOTIKlbo/2Es=
+github.com/hmcalister/skysatchel v1.0.0 h1:CddaRtI+e361ONbLKgnDJd099NxKYzKdWaUzrp6Ht8A=
+github.com/hmcalister/skysatchel v1.0.0/go.mod h1:iSjV5pgoyKabLjvkvpwB33cr1xZrkKowOTIKlbo/2Es=
+github.com/hmcalister/skysatchel v1.0.1 h1:RzEiXtG5k2vW1CCq1OGcNDPVcQMRVL0aEqhnxicli78=
+github.com/hmcalister/skysatchel v1.0.1/go.mod h1:iSjV5pgoyKabLjvkvpwB33cr1xZrkKowOTIKlbo/2Es=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=

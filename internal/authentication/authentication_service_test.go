@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/hmcalister/Cirrus/internal/database"
-	"github.com/hmcalister/Cirrus/internal/email/sender"
+	"github.com/hmcalister/skysatchel/pkg/email/skysender"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -193,16 +193,16 @@ func (q *mockQuerier) DeleteUserTokens(_ context.Context, userID pgtype.UUID) er
 }
 
 type mockSender struct {
-	sent []sender.SendParams
+	sent []skysender.SendParams
 	err  error
 }
 
-func (f *mockSender) Send(_ context.Context, params sender.SendParams) error {
+func (f *mockSender) Send(_ context.Context, params skysender.SendParams) error {
 	f.sent = append(f.sent, params)
 	return f.err
 }
 
-func newTestService(t *testing.T, q database.Querier, mail sender.Sender) *AuthenticationService {
+func newTestService(t *testing.T, q database.Querier, mail skysender.Sender) *AuthenticationService {
 	t.Helper()
 	service, err := NewAuthenticationService(AuthenticationConfig{
 		VerificationExpiryDuration: time.Hour,

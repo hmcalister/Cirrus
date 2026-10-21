@@ -13,12 +13,11 @@ import (
 	"github.com/hmcalister/Cirrus/internal/authentication"
 	"github.com/hmcalister/Cirrus/internal/config"
 	"github.com/hmcalister/Cirrus/internal/database"
-	"github.com/hmcalister/Cirrus/internal/email/mailer"
-	"github.com/hmcalister/Cirrus/internal/email/ratelimit"
-	"github.com/hmcalister/Cirrus/internal/email/sender"
 	"github.com/hmcalister/Cirrus/internal/logging"
 	"github.com/hmcalister/Cirrus/internal/postgres"
 	templates "github.com/hmcalister/Cirrus/internal/template"
+	"github.com/hmcalister/skysatchel/pkg/email/skysender"
+	"github.com/hmcalister/skysatchel/pkg/email/skysender/ratelimit"
 )
 
 func main() {
@@ -59,18 +58,15 @@ func run() error {
 	}
 	defer pool.Close()
 
-	mailerServerAuth, err := mailer.NewServerAuth(
-		cfg.Email.Host,
-		cfg.Email.Port,
-		cfg.Email.Username,
-		cfg.Email.Password,
-	)
 	if err != nil {
 		return err
 	}
 
-	emailSender, err := sender.NewSMTPSender(sender.SMTPConfig{
-		ServerAuth:  mailerServerAuth,
+	emailSender, err := skysender.NewSMTPSender(skysender.SMTPConfig{
+		Host:        cfg.Email.Host,
+		Port:        cfg.Email.Port,
+		Username:    cfg.Email.Username,
+		Password:    cfg.Email.Password,
 		FromAddress: cfg.Email.FromAddress,
 		FromName:    cfg.Email.FromName,
 		Timeout:     cfg.Email.Timeout,
