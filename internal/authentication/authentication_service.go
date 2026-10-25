@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hmcalister/Cirrus/internal/database"
-	"github.com/hmcalister/Cirrus/internal/template"
+	"github.com/hmcalister/cirrus/internal/database"
+	"github.com/hmcalister/cirrus/internal/template"
 	"github.com/hmcalister/skysatchel/pkg/email/skysender"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"

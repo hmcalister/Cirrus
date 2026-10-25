@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/hmcalister/Cirrus/internal/authentication"
+	"github.com/hmcalister/cirrus/internal/authentication"
 )
 
 var _ authentication.TokenLinkBuilder = LinkBuilder{}

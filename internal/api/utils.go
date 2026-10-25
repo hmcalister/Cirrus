@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hmcalister/Cirrus/internal/template"
+	"github.com/hmcalister/cirrus/internal/template"
 )
 
 // Serves the embedded static assets (CSS and the vendored HTMX build).

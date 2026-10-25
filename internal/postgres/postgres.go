@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hmcalister/Cirrus/internal/config"
+	"github.com/hmcalister/cirrus/internal/config"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hmcalister/Cirrus/internal/authentication"
-	"github.com/hmcalister/Cirrus/internal/template"
+	"github.com/hmcalister/cirrus/internal/authentication"
+	"github.com/hmcalister/cirrus/internal/template"
 )
 
 // Interface over the authentication service.

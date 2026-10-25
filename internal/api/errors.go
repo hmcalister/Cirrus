@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/hmcalister/Cirrus/internal/authentication"
+	"github.com/hmcalister/cirrus/internal/authentication"
 )
 
 const (

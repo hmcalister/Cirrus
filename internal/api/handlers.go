@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/hmcalister/Cirrus/internal/template"
+	"github.com/hmcalister/cirrus/internal/template"
 )
 
 const (
