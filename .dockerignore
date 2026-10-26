@@ -4,7 +4,6 @@
 !cmd/
 !internal/
 !web/
-!openapi.yaml
 
 web/node_modules
 web/dist
