@@ -7,17 +7,20 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/hmcalister/cirrus/internal/api"
-	"github.com/hmcalister/cirrus/internal/authentication"
 	"github.com/hmcalister/cirrus/internal/config"
 	"github.com/hmcalister/cirrus/internal/database"
 	"github.com/hmcalister/cirrus/internal/logging"
 	"github.com/hmcalister/cirrus/internal/postgres"
 	templates "github.com/hmcalister/cirrus/internal/template"
+	skysatchel "github.com/hmcalister/skysatchel/pkg/email"
 	"github.com/hmcalister/skysatchel/pkg/email/skysender"
 	"github.com/hmcalister/skysatchel/pkg/email/skysender/ratelimit"
+	"github.com/hmcalister/stratus/pkg/auth"
+	"github.com/hmcalister/stratus/pkg/sessionstore"
 )
 
 func main() {
@@ -58,10 +61,6 @@ func run() error {
 	}
 	defer pool.Close()
 
-	if err != nil {
-		return err
-	}
-
 	emailSender, err := skysender.NewSMTPSender(skysender.SMTPConfig{
 		Host:        cfg.Email.Host,
 		Port:        cfg.Email.Port,
@@ -87,29 +86,45 @@ func run() error {
 		return err
 	}
 
-	linkBuilder, err := api.NewLinkBuilder(cfg.AuthHTTP.BaseURL)
-	if err != nil {
-		return err
-	}
+	// A Secure session cookie is required outside debug mode.
+	cookieSecure := !cfg.Debug || strings.HasPrefix(cfg.AuthHTTP.BaseURL, "https://")
+	sessionCookieName := api.SessionCookieName(cookieSecure)
 
-	authService, err := authentication.NewAuthenticationService(authentication.AuthenticationConfig{
-		VerificationExpiryDuration: cfg.Auth.VerificationExpiryDuration,
-		ResetExpiryDuration:        cfg.Auth.ResetExpiryDuration,
-		SessionExpiryDuration:      cfg.Auth.SessionExpiryDuration,
-		Links:                      linkBuilder,
-		Querier:                    database.New(pool),
-		EmailSender:                ratelimitedEmailSender,
-		EmailRenderer:              templateLoader,
+	// Stratus owns authentication.
+	authService, err := auth.New(auth.AuthServiceConfig{
+		Sender:     ratelimitedEmailSender,
+		Sessions:   sessionstore.NewMemorySessionStore(),
+		BaseURL:    cfg.AuthHTTP.BaseURL,
+		LinkTTL:    cfg.Auth.LinkExpiryDuration,
+		SessionTTL: cfg.Auth.SessionExpiryDuration,
+		SuccessURL: "/account",
+		Cookie: auth.CookieConfig{
+			Name:   sessionCookieName,
+			Secure: cookieSecure,
+		},
+		LinkEmail: func(link string) skysatchel.Message {
+			body, err := templateLoader.RenderEmail(templates.TemplateMagicLink, struct{ Link string }{Link: link})
+			if err != nil {
+				slog.Error("error rendering sign-in email", "err", err)
+				body = "Sign in to Cirrus: " + link
+			}
+			return skysatchel.Message{
+				Subject: "Sign in to Cirrus",
+				Body:    body,
+			}
+		},
 	})
 	if err != nil {
 		return err
 	}
 
 	apiServer, err := api.NewServer(api.ServerConfig{
-		AuthService:   authService,
-		PagesRenderer: templateLoader,
-		// Debug serves plain HTTP, where a Secure cookie would never be sent.
-		CookieSecure: !cfg.Debug,
+		AuthService:       authService,
+		Users:             database.New(pool),
+		AuthHandlers:      authService.AuthHandlers(),
+		PagesRenderer:     templateLoader,
+		CookieSecure:      cookieSecure,
+		SessionCookieName: sessionCookieName,
 	})
 	if err != nil {
 		return err
