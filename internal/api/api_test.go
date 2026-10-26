@@ -10,95 +10,106 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hmcalister/cirrus/internal/authentication"
+	"github.com/hmcalister/cirrus/internal/database"
+	templates "github.com/hmcalister/cirrus/internal/template"
+	skysatchel "github.com/hmcalister/skysatchel/pkg/email"
+	"github.com/hmcalister/skysatchel/pkg/email/skysender"
+	"github.com/hmcalister/stratus/pkg/auth"
+	"github.com/hmcalister/stratus/pkg/sessionstore"
 )
 
 const (
-	testEmail    = "user@example.com"
-	testPassword = "hunter2"
-	testToken    = "raw-session-token"
+	testEmail = "user@example.com"
+	testToken = "raw-session-token"
 )
 
 // Stub of the authService seam. Records the calls it receives and returns the
 // behaviour configured by the test.
 type stubAuthService struct {
-	sessionEmail    string
-	sessionOK       bool
-	active          bool
-	verified        bool
-	err             error
-	signInToken     string
-	signInErr       error
-	verifyResult    bool
-	verifyErr       error
-	lastEmail       string
-	lastPassword    string
-	lastToken       string
-	lastNewPassword string
+	identity     auth.Identity
+	validateErr  error
+	logoutErr    error
+	logoutAllErr error
 
-	registeredEmails []string
-	activeEmails     map[string]bool
-	deleted          []string
+	loggedOut    []string
+	loggedOutAll []string
 }
 
-func (s *stubAuthService) Register(_ context.Context, userEmail, password string) error {
-	s.lastEmail, s.lastPassword = userEmail, password
-	if s.err != nil {
-		return s.err
+func (s *stubAuthService) ValidateSession(_ context.Context, rawToken string) (auth.Identity, error) {
+	if s.validateErr != nil {
+		return auth.Identity{}, s.validateErr
 	}
-	s.registeredEmails = append(s.registeredEmails, userEmail)
+	if rawToken == "" {
+		return auth.Identity{}, auth.ErrUnauthenticated
+	}
+	return s.identity, nil
+}
+
+func (s *stubAuthService) Logout(_ context.Context, rawToken string) error {
+	s.loggedOut = append(s.loggedOut, rawToken)
+	return s.logoutErr
+}
+
+func (s *stubAuthService) LogoutAll(_ context.Context, userEmail string) error {
+	s.loggedOutAll = append(s.loggedOutAll, userEmail)
+	return s.logoutAllErr
+}
+
+var _ authService = (*stubAuthService)(nil)
+
+// Stub of the user profile store.
+type stubUserStore struct {
+	users        map[string]database.UserAccount
+	getErr       error
+	setActiveErr error
+	deleteErr    error
+
+	deleted []string
+}
+
+func newStubUserStore() *stubUserStore {
+	return &stubUserStore{users: make(map[string]database.UserAccount)}
+}
+
+func (s *stubUserStore) GetOrCreateUser(_ context.Context, email string) (database.UserAccount, error) {
+	if s.getErr != nil {
+		return database.UserAccount{}, s.getErr
+	}
+	if s.users == nil {
+		s.users = make(map[string]database.UserAccount)
+	}
+
+	user, ok := s.users[email]
+	if !ok {
+		user = database.UserAccount{Email: email, Active: true}
+		s.users[email] = user
+	}
+	return user, nil
+}
+
+func (s *stubUserStore) SetActive(_ context.Context, arg database.SetActiveParams) error {
+	if s.setActiveErr != nil {
+		return s.setActiveErr
+	}
+
+	user := s.users[arg.Email]
+	user.Email = arg.Email
+	user.Active = arg.Active
+	s.users[arg.Email] = user
 	return nil
 }
 
-func (s *stubAuthService) Verify(_ context.Context, rawToken string) (bool, error) {
-	s.lastToken = rawToken
-	return s.verifyResult, s.verifyErr
-}
-
-func (s *stubAuthService) SignIn(_ context.Context, userEmail, password string) (string, error) {
-	s.lastEmail, s.lastPassword = userEmail, password
-	return s.signInToken, s.signInErr
-}
-
-func (s *stubAuthService) ResendVerification(_ context.Context, userEmail string) error {
-	s.lastEmail = userEmail
-	return s.err
-}
-
-func (s *stubAuthService) RequestPasswordReset(_ context.Context, userEmail string) error {
-	s.lastEmail = userEmail
-	return s.err
-}
-
-func (s *stubAuthService) ConfirmPasswordReset(_ context.Context, rawToken, newPassword string) error {
-	s.lastToken, s.lastNewPassword = rawToken, newPassword
-	return s.err
-}
-
-func (s *stubAuthService) SetAccountActive(_ context.Context, userEmail string, active bool) error {
-	if s.activeEmails == nil {
-		s.activeEmails = make(map[string]bool)
+func (s *stubUserStore) DeleteUser(_ context.Context, email string) error {
+	if s.deleteErr != nil {
+		return s.deleteErr
 	}
-	s.activeEmails[userEmail] = active
-	return s.err
+
+	delete(s.users, email)
+	s.deleted = append(s.deleted, email)
+	return nil
 }
 
-func (s *stubAuthService) DeleteAccount(_ context.Context, userEmail string) error {
-	s.deleted = append(s.deleted, userEmail)
-	return s.err
-}
-
-func (s *stubAuthService) SessionEmail(_ context.Context, _ string) (string, bool) {
-	return s.sessionEmail, s.sessionOK
-}
-
-func (s *stubAuthService) AccountActive(_ context.Context, _ string) (bool, error) {
-	return s.active, nil
-}
-
-func (s *stubAuthService) AccountVerified(_ context.Context, _ string) (bool, error) {
-	return s.verified, nil
-}
+var _ userStore = (*stubUserStore)(nil)
 
 // Stub page renderer. Produces a body derived from the template name and data
 // so tests can assert the rendered fragment without owning real templates.
@@ -113,16 +124,31 @@ func (s stubRenderer) RenderPage(templateName string, data any) (string, error) 
 	return fmt.Sprintf("<rendered %s %v>", templateName, data), nil
 }
 
-var _ authService = (*stubAuthService)(nil)
+var _ templates.PageRenderer = stubRenderer{}
 
-func newTestServer(t *testing.T, auth *stubAuthService) *Server {
+func newTestServer(t *testing.T, authService *stubAuthService, users *stubUserStore) *Server {
 	t.Helper()
 
-	server, err := NewServer(ServerConfig{
-		AuthService:   auth,
-		PagesRenderer: stubRenderer{},
-		CookieSecure:  true,
+	if authService == nil {
+		authService = &stubAuthService{}
+	}
+	if users == nil {
+		users = newStubUserStore()
+	}
+
+	return newTestServerWith(t, ServerConfig{
+		AuthService:       authService,
+		Users:             users,
+		PagesRenderer:     stubRenderer{},
+		CookieSecure:      true,
+		SessionCookieName: secureSessionCookieName,
 	})
+}
+
+func newTestServerWith(t *testing.T, cfg ServerConfig) *Server {
+	t.Helper()
+
+	server, err := NewServer(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,9 +158,23 @@ func newTestServer(t *testing.T, auth *stubAuthService) *Server {
 // Posts url.Values to path through the server's routes.
 func postForm(t *testing.T, server *Server, path string, values url.Values) *httptest.ResponseRecorder {
 	t.Helper()
+	return postWithCookie(t, server, path, values, "")
+}
 
-	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(values.Encode()))
+// Posts url.Values to path carrying the given session cookie.
+func postWithCookie(t *testing.T, server *Server, path string, values url.Values, cookieValue string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	body := ""
+	if values != nil {
+		body = values.Encode()
+	}
+
+	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if cookieValue != "" {
+		request.AddCookie(&http.Cookie{Name: secureSessionCookieName, Value: cookieValue})
+	}
 	recorder := httptest.NewRecorder()
 	server.Routes().ServeHTTP(recorder, request)
 	return recorder
@@ -145,296 +185,270 @@ func getWithCookie(t *testing.T, server *Server, path, cookie string) *httptest.
 
 	request := httptest.NewRequest(http.MethodGet, path, nil)
 	if cookie != "" {
-		request.AddCookie(&http.Cookie{Name: authenticationCookieName, Value: cookie})
+		request.AddCookie(&http.Cookie{Name: secureSessionCookieName, Value: cookie})
 	}
 	recorder := httptest.NewRecorder()
 	server.Routes().ServeHTTP(recorder, request)
 	return recorder
 }
 
+// postAuthedForm issues a POST carrying a session cookie so the request passes
+// RequireAuth.
+func postAuthedForm(t *testing.T, server *Server, path string, values url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+	return postWithCookie(t, server, path, values, testToken)
+}
+
 func sessionCookie(t *testing.T, recorder *httptest.ResponseRecorder) *http.Cookie {
 	t.Helper()
 
 	for _, cookie := range recorder.Result().Cookies() {
-		if cookie.Name == authenticationCookieName {
+		if cookie.Name == secureSessionCookieName {
 			return cookie
 		}
 	}
-	t.Fatalf("response has no %q cookie; headers: %v", authenticationCookieName, recorder.Header())
+	t.Fatalf("response has no %q cookie; headers: %v", secureSessionCookieName, recorder.Header())
 	return nil
 }
 
 func TestNewServerValidation(t *testing.T) {
+	valid := ServerConfig{
+		AuthService:       &stubAuthService{},
+		Users:             newStubUserStore(),
+		PagesRenderer:     stubRenderer{},
+		SessionCookieName: secureSessionCookieName,
+	}
+
 	tests := []struct {
-		name string
-		cfg  ServerConfig
+		name   string
+		mutate func(*ServerConfig)
 	}{
-		{"nil auth service", ServerConfig{PagesRenderer: stubRenderer{}}},
-		{"nil pages renderer", ServerConfig{AuthService: &stubAuthService{}}},
+		{"nil auth service", func(c *ServerConfig) { c.AuthService = nil }},
+		{"nil user store", func(c *ServerConfig) { c.Users = nil }},
+		{"nil pages renderer", func(c *ServerConfig) { c.PagesRenderer = nil }},
+		{"empty cookie name", func(c *ServerConfig) { c.SessionCookieName = "" }},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := NewServer(tc.cfg); err == nil {
+			cfg := valid
+			tc.mutate(&cfg)
+			if _, err := NewServer(cfg); err == nil {
 				t.Error("expected error, got nil")
 			}
 		})
 	}
-}
 
-func TestPostErrorsRenderFragmentWithStatus(t *testing.T) {
-	tests := []struct {
-		name     string
-		path     string
-		form     url.Values
-		authErr  error
-		template string
-		status   int
-	}{
-		{
-			name:     "bad sign in",
-			path:     "/sign-in",
-			form:     url.Values{"email": {testEmail}, "password": {testPassword}},
-			authErr:  authentication.ErrBadSignIn,
-			template: "sign_in_error",
-			status:   http.StatusUnauthorized,
-		},
-		{
-			name:     "register email taken",
-			path:     "/register",
-			form:     url.Values{"email": {testEmail}, "password": {testPassword}},
-			authErr:  fmt.Errorf("%w: %s", authentication.ErrEmailTaken, testEmail),
-			template: "register_error",
-			status:   http.StatusConflict,
-		},
-		{
-			name:     "register invalid email",
-			path:     "/register",
-			form:     url.Values{"email": {"nope"}, "password": {testPassword}},
-			authErr:  authentication.ErrInvalidEmail,
-			template: "register_error",
-			status:   http.StatusBadRequest,
-		},
-		{
-			name:     "reset bad token",
-			path:     "/reset",
-			form:     url.Values{"token": {testToken}, "password": {testPassword}},
-			authErr:  authentication.ErrBadToken,
-			template: "reset_error",
-			status:   http.StatusBadRequest,
-		},
-		{
-			name:     "reset invalid password",
-			path:     "/reset",
-			form:     url.Values{"token": {testToken}, "password": {""}},
-			authErr:  authentication.ErrInvalidPassword,
-			template: "reset_error",
-			status:   http.StatusBadRequest,
-		},
-		{
-			name:     "account setActive unexpected error",
-			path:     "/account/setActive",
-			form:     url.Values{"token": {testToken}, "activeStatus": {"false"}},
-			authErr:  errors.New("database down"),
-			template: "account_error",
-			status:   http.StatusInternalServerError,
-		},
-		{
-			name:     "account setActive bas request",
-			path:     "/account/setActive",
-			form:     url.Values{"token": {testToken}, "activeStatus": {"other"}},
-			authErr:  nil,
-			template: "account_error",
-			status:   http.StatusBadRequest,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			auth := &stubAuthService{err: tc.authErr, signInErr: tc.authErr, sessionEmail: testEmail, sessionOK: true}
-			server := newTestServer(t, auth)
-
-			var recorder *httptest.ResponseRecorder
-			if strings.HasPrefix(tc.path, "/account") {
-				recorder = postAuthedForm(t, server, tc.path, tc.form)
-			} else {
-				recorder = postForm(t, server, tc.path, tc.form)
-			}
-
-			if recorder.Code != tc.status {
-				t.Errorf("status = %d, want %d", recorder.Code, tc.status)
-			}
-			if !strings.Contains(recorder.Body.String(), tc.template) {
-				t.Errorf("body %q does not reference template %q", recorder.Body.String(), tc.template)
-			}
-			if recorder.Header().Get("HX-Redirect") != "" {
-				t.Errorf("error response must not redirect; HX-Redirect = %q", recorder.Header().Get("HX-Redirect"))
-			}
-			if got := recorder.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/html") {
-				t.Errorf("Content-Type = %q, want text/html", got)
-			}
-		})
+	if _, err := NewServer(valid); err != nil {
+		t.Errorf("NewServer(valid) = %v, want nil", err)
 	}
 }
 
-func TestPostSuccessRedirects(t *testing.T) {
-	tests := []struct {
-		name     string
-		path     string
-		form     url.Values
-		auth     *stubAuthService
-		location string
-	}{
-		{
-			name:     "sign in",
-			path:     "/sign-in",
-			form:     url.Values{"email": {testEmail}, "password": {testPassword}},
-			auth:     &stubAuthService{signInToken: testToken},
-			location: "/account",
-		},
-		{
-			name:     "register",
-			path:     "/register",
-			form:     url.Values{"email": {testEmail}, "password": {testPassword}},
-			auth:     &stubAuthService{},
-			location: "/sign-in",
-		},
-		{
-			name:     "logout",
-			path:     "/logout",
-			form:     nil,
-			auth:     &stubAuthService{},
-			location: "/sign-in",
-		},
-		{
-			name:     "reset",
-			path:     "/reset",
-			form:     url.Values{"token": {testToken}, "password": {testPassword}},
-			auth:     &stubAuthService{},
-			location: "/sign-in",
-		},
-		{
-			name:     "account delete",
-			path:     "/account/delete",
-			form:     nil,
-			auth:     &stubAuthService{sessionEmail: testEmail, sessionOK: true},
-			location: "/sign-in",
-		},
-	}
+func TestMountedAuthHandlersServe(t *testing.T) {
+	authRoutes := http.NewServeMux()
+	authRoutes.HandleFunc("POST /auth/magic-link", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+	})
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			server := newTestServer(t, tc.auth)
+	server := newTestServerWith(t, ServerConfig{
+		AuthService:       &stubAuthService{},
+		Users:             newStubUserStore(),
+		AuthHandlers:      authRoutes,
+		PagesRenderer:     stubRenderer{},
+		SessionCookieName: secureSessionCookieName,
+	})
 
-			var recorder *httptest.ResponseRecorder
-			if strings.HasPrefix(tc.path, "/account") {
-				recorder = postAuthedForm(t, server, tc.path, tc.form)
-			} else {
-				recorder = postForm(t, server, tc.path, tc.form)
-			}
-
-			if recorder.Code != http.StatusSeeOther {
-				t.Errorf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
-			}
-			if got := recorder.Header().Get("HX-Redirect"); got != tc.location {
-				t.Errorf("HX-Redirect = %q, want %q", got, tc.location)
-			}
-		})
+	recorder := postForm(t, server, "/auth/magic-link", url.Values{"email": {testEmail}})
+	if recorder.Code != http.StatusAccepted {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusAccepted)
 	}
 }
 
-func TestSetActiveSwapsStatusFragment(t *testing.T) {
-	tests := []struct {
-		name      string
-		active    string
-		wantState bool
-	}{
-		{"activate", "true", true},
-		{"deactivate", "false", false},
+// Captures the messages a Sender would deliver.
+type captureSender struct {
+	sent []skysender.SendParams
+}
+
+func (s *captureSender) Send(_ context.Context, params skysender.SendParams) error {
+	s.sent = append(s.sent, params)
+	return nil
+}
+
+var _ skysender.Sender = (*captureSender)(nil)
+
+// Exercises the real Stratus service end to end: request a link, consume it,
+// use the session, then sign out. This pins the cookie name shared between
+// Stratus and RequireAuth.
+func TestMagicLinkSignInFlow(t *testing.T) {
+	sender := &captureSender{}
+	authService, err := auth.New(auth.AuthServiceConfig{
+		Sender:     sender,
+		Sessions:   sessionstore.NewMemorySessionStore(),
+		BaseURL:    "https://cloud.example.com",
+		SuccessURL: "/account",
+		Cookie: auth.CookieConfig{
+			Name:   secureSessionCookieName,
+			Secure: true,
+		},
+		LinkEmail: func(link string) skysatchel.Message {
+			return skysatchel.Message{Subject: "Sign in", Body: link}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			auth := &stubAuthService{sessionEmail: testEmail, sessionOK: true}
-			server := newTestServer(t, auth)
+	users := newStubUserStore()
+	server := newTestServerWith(t, ServerConfig{
+		AuthService:       authService,
+		Users:             users,
+		AuthHandlers:      authService.AuthHandlers(),
+		PagesRenderer:     stubRenderer{},
+		CookieSecure:      true,
+		SessionCookieName: secureSessionCookieName,
+	})
 
-			recorder := postAuthedForm(t, server, "/account/setActive", url.Values{"activeStatus": {tc.active}})
+	// 1. Request a magic link.
+	recorder := postForm(t, server, "/auth/magic-link", url.Values{"email": {testEmail}})
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("magic-link request status = %d, want %d", recorder.Code, http.StatusAccepted)
+	}
+	if len(sender.sent) != 1 {
+		t.Fatalf("sent %d emails, want 1", len(sender.sent))
+	}
+	if got := sender.sent[0].ToRecipients; len(got) != 1 || got[0] != testEmail {
+		t.Fatalf("ToRecipients = %v, want [%s]", got, testEmail)
+	}
 
-			if recorder.Code != http.StatusOK {
-				t.Errorf("status = %d, want %d", recorder.Code, http.StatusOK)
-			}
-			if got := recorder.Header().Get("HX-Redirect"); got != "" {
-				t.Errorf("setActive must not redirect; HX-Redirect = %q", got)
-			}
-			if !strings.Contains(recorder.Body.String(), "account_active_status") {
-				t.Errorf("body %q does not reference account_active_status", recorder.Body.String())
-			}
-			if got := auth.activeEmails[testEmail]; got != tc.wantState {
-				t.Errorf("SetAccountActive(%v) recorded, want %v", got, tc.wantState)
-			}
-		})
+	// 2. Consume the link. Stratus sets the session cookie and redirects.
+	link, err := url.Parse(sender.sent[0].Body)
+	if err != nil {
+		t.Fatalf("parsing link %q: %v", sender.sent[0].Body, err)
+	}
+	consume := httptest.NewRequest(http.MethodGet, link.RequestURI(), nil)
+	consumeRecorder := httptest.NewRecorder()
+	server.Routes().ServeHTTP(consumeRecorder, consume)
+
+	if consumeRecorder.Code != http.StatusFound {
+		t.Fatalf("consume status = %d, want %d", consumeRecorder.Code, http.StatusFound)
+	}
+	if got := consumeRecorder.Header().Get("Location"); got != "/account" {
+		t.Errorf("consume Location = %q, want /account", got)
+	}
+	cookie := sessionCookie(t, consumeRecorder)
+
+	// 3. The session reaches a protected page and creates the profile.
+	accountRecorder := getWithCookie(t, server, "/account", cookie.Value)
+	if accountRecorder.Code != http.StatusOK {
+		t.Fatalf("account status = %d, want %d", accountRecorder.Code, http.StatusOK)
+	}
+	if _, ok := users.users[testEmail]; !ok {
+		t.Error("sign in did not create a user profile")
+	}
+
+	// 4. Signing out revokes the session.
+	logoutRecorder := postWithCookie(t, server, "/logout", nil, cookie.Value)
+	if logoutRecorder.Code != http.StatusSeeOther {
+		t.Fatalf("logout status = %d, want %d", logoutRecorder.Code, http.StatusSeeOther)
+	}
+
+	afterLogout := getWithCookie(t, server, "/account", cookie.Value)
+	if afterLogout.Code != http.StatusSeeOther {
+		t.Errorf("account after logout status = %d, want %d", afterLogout.Code, http.StatusSeeOther)
 	}
 }
 
-func TestSignInSetsSessionCookie(t *testing.T) {
-	auth := &stubAuthService{signInToken: testToken}
-	server := newTestServer(t, auth)
+func TestSignInPageRendersMagicLinkForm(t *testing.T) {
+	loader, err := templates.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	recorder := postForm(t, server, "/sign-in", url.Values{"email": {testEmail}, "password": {testPassword}})
-	cookie := sessionCookie(t, recorder)
+	server := newTestServerWith(t, ServerConfig{
+		AuthService:       &stubAuthService{},
+		Users:             newStubUserStore(),
+		PagesRenderer:     loader,
+		CookieSecure:      true,
+		SessionCookieName: secureSessionCookieName,
+	})
 
-	if cookie.Value != testToken {
-		t.Errorf("cookie value = %q, want %q", cookie.Value, testToken)
+	recorder := getWithCookie(t, server, "/sign-in", "")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
 	}
-	if !cookie.HttpOnly {
-		t.Error("session cookie must be HttpOnly")
-	}
-	if !cookie.Secure {
-		t.Error("session cookie must be Secure")
-	}
-	if cookie.SameSite != http.SameSiteLaxMode {
-		t.Errorf("SameSite = %v, want Lax", cookie.SameSite)
-	}
-}
 
-func TestLogoutClearsSessionCookie(t *testing.T) {
-	server := newTestServer(t, &stubAuthService{})
-
-	recorder := postForm(t, server, "/logout", nil)
-	cookie := sessionCookie(t, recorder)
-
-	if cookie.Value != "" {
-		t.Errorf("cookie value = %q, want empty", cookie.Value)
+	body := recorder.Body.String()
+	if !strings.Contains(body, `hx-post="/auth/magic-link"`) {
+		t.Errorf("sign-in page does not post to the Stratus magic-link route")
 	}
-	if cookie.MaxAge >= 0 {
-		t.Errorf("MaxAge = %d, want a non-positive value", cookie.MaxAge)
+	if !strings.Contains(body, "Get sign-in link") {
+		t.Errorf("sign-in page has no link request button")
 	}
-	if !cookie.HttpOnly || !cookie.Secure {
-		t.Error("cleared cookie must keep HttpOnly and Secure attributes")
+	if strings.Contains(body, `name="password"`) {
+		t.Errorf("sign-in page still asks for a password")
 	}
 }
 
-func TestDeleteClearsSessionCookie(t *testing.T) {
-	auth := &stubAuthService{sessionEmail: testEmail, sessionOK: true}
-	server := newTestServer(t, auth)
+func TestMagicLinkEmailTemplateRenders(t *testing.T) {
+	loader, err := templates.New()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	recorder := postAuthedForm(t, server, "/account/delete", nil)
-	cookie := sessionCookie(t, recorder)
+	const link = "https://cloud.example.com/auth/magic-link/consume?token=abc123"
+	body, err := loader.RenderEmail(templates.TemplateMagicLink, struct{ Link string }{Link: link})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(body, link) {
+		t.Errorf("magic-link email does not contain the link: %s", body)
+	}
+}
 
-	if cookie.Value != "" || cookie.MaxAge >= 0 {
-		t.Errorf("delete should clear the session cookie, got value %q MaxAge %d", cookie.Value, cookie.MaxAge)
+func TestAccountPageRendersWithRealTemplates(t *testing.T) {
+	loader, err := templates.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	users := newStubUserStore()
+	users.users[testEmail] = database.UserAccount{Email: testEmail, Active: true}
+	server := newTestServerWith(t, ServerConfig{
+		AuthService:       &stubAuthService{identity: auth.Identity{Email: testEmail}},
+		Users:             users,
+		PagesRenderer:     loader,
+		CookieSecure:      true,
+		SessionCookieName: secureSessionCookieName,
+	})
+
+	recorder := getWithCookie(t, server, "/account", testToken)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	body := recorder.Body.String()
+	if !strings.Contains(body, "Your account") {
+		t.Errorf("account page body missing heading: %s", body)
+	}
+	if strings.Contains(body, "unverified") {
+		t.Errorf("account page still mentions verification")
+	}
+	if strings.Contains(body, "Reset password") {
+		t.Errorf("account page still offers a password reset")
 	}
 }
 
 func TestRequireAuthRedirectsAnonymous(t *testing.T) {
-	server := newTestServer(t, &stubAuthService{sessionOK: false})
+	server := newTestServer(t, &stubAuthService{identity: auth.Identity{Email: testEmail}}, nil)
 
 	tests := []struct {
 		name   string
 		method string
 		path   string
 	}{
+		{"root", http.MethodGet, "/"},
 		{"account page", http.MethodGet, "/account"},
 		{"setActive", http.MethodPost, "/account/setActive"},
+		{"logout all", http.MethodPost, "/account/logout-all"},
 		{"delete", http.MethodPost, "/account/delete"},
 	}
 
@@ -454,8 +468,10 @@ func TestRequireAuthRedirectsAnonymous(t *testing.T) {
 	}
 }
 
-func TestAccountPageRequiresSession(t *testing.T) {
-	server := newTestServer(t, &stubAuthService{sessionEmail: testEmail, sessionOK: true, active: true})
+func TestAccountPageRequiresSessionAndCreatesProfile(t *testing.T) {
+	authService := &stubAuthService{identity: auth.Identity{Email: testEmail}}
+	users := newStubUserStore()
+	server := newTestServer(t, authService, users)
 
 	recorder := getWithCookie(t, server, "/account", testToken)
 	if recorder.Code != http.StatusOK {
@@ -464,104 +480,203 @@ func TestAccountPageRequiresSession(t *testing.T) {
 	if !strings.Contains(recorder.Body.String(), "account.tmpl") {
 		t.Errorf("body %q does not reference the account page", recorder.Body.String())
 	}
-}
 
-func TestPasswordResetDoesNotLeakAccountExistence(t *testing.T) {
-	// A known account and an unknown account both render 200 with the same
-	// status fragment, so the endpoint cannot be used to enumerate accounts.
-	known := newTestServer(t, &stubAuthService{})
-	unknown := newTestServer(t, &stubAuthService{})
-
-	knownRecorder := postForm(t, known, "/password/reset", url.Values{"email": {"known@example.com"}})
-	unknownRecorder := postForm(t, unknown, "/password/reset", url.Values{"email": {"unknown@example.com"}})
-
-	if knownRecorder.Code != http.StatusOK || unknownRecorder.Code != http.StatusOK {
-		t.Fatalf("status = %d and %d, want both 200", knownRecorder.Code, unknownRecorder.Code)
+	user, ok := users.users[testEmail]
+	if !ok {
+		t.Fatal("authenticated request did not create a user profile")
 	}
-	if knownRecorder.Body.String() != unknownRecorder.Body.String() {
-		t.Errorf("bodies differ:\n known: %s\n unknown: %s", knownRecorder.Body.String(), unknownRecorder.Body.String())
-	}
-	if knownRecorder.Header().Get("HX-Redirect") != "" {
-		t.Error("status response must not redirect")
+	if !user.Active {
+		t.Error("new profile should be active")
 	}
 }
 
-func TestVerifyResendStatusDoesNotLeakExistence(t *testing.T) {
-	known := newTestServer(t, &stubAuthService{})
-	unknown := newTestServer(t, &stubAuthService{})
+func TestProfileCreationFailureIsInternalError(t *testing.T) {
+	users := newStubUserStore()
+	users.getErr = errors.New("database down")
+	server := newTestServer(t, &stubAuthService{identity: auth.Identity{Email: testEmail}}, users)
 
-	knownRecorder := postForm(t, known, "/verify/resend", url.Values{"email": {"known@example.com"}})
-	unknownRecorder := postForm(t, unknown, "/verify/resend", url.Values{"email": {"unknown@example.com"}})
-
-	if knownRecorder.Code != http.StatusOK || unknownRecorder.Code != http.StatusOK {
-		t.Fatalf("status = %d and %d, want both 200", knownRecorder.Code, unknownRecorder.Code)
-	}
-	if knownRecorder.Body.String() != unknownRecorder.Body.String() {
-		t.Errorf("bodies differ:\n known: %s\n unknown: %s", knownRecorder.Body.String(), unknownRecorder.Body.String())
-	}
-}
-
-func TestVerifyRedirectsToSignIn(t *testing.T) {
-	server := newTestServer(t, &stubAuthService{verifyResult: true})
-
-	request := httptest.NewRequest(http.MethodGet, "/verify?token="+testToken, nil)
-	recorder := httptest.NewRecorder()
-	server.Routes().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusSeeOther {
-		t.Errorf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
-	}
-	if got := recorder.Header().Get("Location"); got != "/sign-in" {
-		t.Errorf("Location = %q, want /sign-in", got)
-	}
-}
-
-func TestVerifyBadTokenShowsError(t *testing.T) {
-	server := newTestServer(t, &stubAuthService{verifyErr: authentication.ErrBadToken})
-
-	request := httptest.NewRequest(http.MethodGet, "/verify?token=bad", nil)
-	recorder := httptest.NewRecorder()
-	server.Routes().ServeHTTP(recorder, request)
-
-	if recorder.Code != http.StatusBadRequest {
-		t.Errorf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
-	}
-	if !strings.Contains(recorder.Body.String(), "sign_in_error") {
-		t.Errorf("body %q does not reference sign_in_error", recorder.Body.String())
-	}
-}
-
-func TestRenderFailureIsInternalError(t *testing.T) {
-	server, err := NewServer(ServerConfig{
-		AuthService:   &stubAuthService{},
-		PagesRenderer: stubRenderer{err: errors.New("boom")},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	recorder := postForm(t, server, "/password/reset", url.Values{"email": {testEmail}})
+	recorder := getWithCookie(t, server, "/account", testToken)
 	if recorder.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want %d", recorder.Code, http.StatusInternalServerError)
 	}
 }
 
-// postAuthedForm issues a POST carrying a session cookie so the request passes
-// RequireAuth.
-func postAuthedForm(t *testing.T, server *Server, path string, values url.Values) *httptest.ResponseRecorder {
-	t.Helper()
-
-	var body *strings.Reader
-	if values == nil {
-		body = strings.NewReader("")
-	} else {
-		body = strings.NewReader(values.Encode())
+func TestSetActiveSwapsStatusFragment(t *testing.T) {
+	tests := []struct {
+		name      string
+		active    string
+		wantState bool
+	}{
+		{"activate", "true", true},
+		{"deactivate", "false", false},
 	}
 
-	request := httptest.NewRequest(http.MethodPost, path, body)
-	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	request.AddCookie(&http.Cookie{Name: authenticationCookieName, Value: testToken})
-	recorder := httptest.NewRecorder()
-	server.Routes().ServeHTTP(recorder, request)
-	return recorder
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			users := newStubUserStore()
+			users.users[testEmail] = database.UserAccount{Email: testEmail, Active: !tc.wantState}
+			server := newTestServer(t, &stubAuthService{identity: auth.Identity{Email: testEmail}}, users)
+
+			recorder := postAuthedForm(t, server, "/account/setActive", url.Values{"activeStatus": {tc.active}})
+
+			if recorder.Code != http.StatusOK {
+				t.Errorf("status = %d, want %d", recorder.Code, http.StatusOK)
+			}
+			if got := recorder.Header().Get("HX-Redirect"); got != "" {
+				t.Errorf("setActive must not redirect; HX-Redirect = %q", got)
+			}
+			if !strings.Contains(recorder.Body.String(), "account_active_status") {
+				t.Errorf("body %q does not reference account_active_status", recorder.Body.String())
+			}
+			if got := users.users[testEmail].Active; got != tc.wantState {
+				t.Errorf("SetActive(%v) recorded, want %v", got, tc.wantState)
+			}
+		})
+	}
+}
+
+func TestSetActiveRejectsBadValue(t *testing.T) {
+	server := newTestServer(t, &stubAuthService{identity: auth.Identity{Email: testEmail}}, nil)
+
+	recorder := postAuthedForm(t, server, "/account/setActive", url.Values{"activeStatus": {"other"}})
+
+	if recorder.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusBadRequest)
+	}
+	if !strings.Contains(recorder.Body.String(), "account_error") {
+		t.Errorf("body %q does not reference account_error", recorder.Body.String())
+	}
+}
+
+func TestLogoutClearsSessionCookie(t *testing.T) {
+	authService := &stubAuthService{identity: auth.Identity{Email: testEmail}}
+	server := newTestServer(t, authService, nil)
+
+	recorder := postAuthedForm(t, server, "/logout", nil)
+	cookie := sessionCookie(t, recorder)
+
+	if recorder.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
+	}
+	if got := recorder.Header().Get("HX-Redirect"); got != "/sign-in" {
+		t.Errorf("HX-Redirect = %q, want /sign-in", got)
+	}
+	if cookie.Value != "" {
+		t.Errorf("cookie value = %q, want empty", cookie.Value)
+	}
+	if cookie.MaxAge >= 0 {
+		t.Errorf("MaxAge = %d, want a non-positive value", cookie.MaxAge)
+	}
+	if !cookie.HttpOnly || !cookie.Secure {
+		t.Error("cleared cookie must keep HttpOnly and Secure attributes")
+	}
+	if cookie.SameSite != http.SameSiteLaxMode {
+		t.Errorf("SameSite = %v, want Lax", cookie.SameSite)
+	}
+	if len(authService.loggedOut) != 1 || authService.loggedOut[0] != testToken {
+		t.Errorf("Logout calls = %v, want [%q]", authService.loggedOut, testToken)
+	}
+}
+
+func TestLogoutAllRevokesEverySession(t *testing.T) {
+	authService := &stubAuthService{identity: auth.Identity{Email: testEmail}}
+	server := newTestServer(t, authService, nil)
+
+	recorder := postAuthedForm(t, server, "/account/logout-all", nil)
+	cookie := sessionCookie(t, recorder)
+
+	if recorder.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
+	}
+	if got := recorder.Header().Get("HX-Redirect"); got != "/sign-in" {
+		t.Errorf("HX-Redirect = %q, want /sign-in", got)
+	}
+	if cookie.Value != "" || cookie.MaxAge >= 0 {
+		t.Errorf("logout-all should clear the session cookie, got value %q MaxAge %d", cookie.Value, cookie.MaxAge)
+	}
+	if len(authService.loggedOutAll) != 1 || authService.loggedOutAll[0] != testEmail {
+		t.Errorf("LogoutAll calls = %v, want [%q]", authService.loggedOutAll, testEmail)
+	}
+}
+
+func TestDeleteRemovesProfileAndClearsSessionCookie(t *testing.T) {
+	authService := &stubAuthService{identity: auth.Identity{Email: testEmail}}
+	users := newStubUserStore()
+	users.users[testEmail] = database.UserAccount{Email: testEmail, Active: true}
+	server := newTestServer(t, authService, users)
+
+	recorder := postAuthedForm(t, server, "/account/delete", nil)
+	cookie := sessionCookie(t, recorder)
+
+	if recorder.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusSeeOther)
+	}
+	if got := recorder.Header().Get("HX-Redirect"); got != "/sign-in" {
+		t.Errorf("HX-Redirect = %q, want /sign-in", got)
+	}
+	if cookie.Value != "" || cookie.MaxAge >= 0 {
+		t.Errorf("delete should clear the session cookie, got value %q MaxAge %d", cookie.Value, cookie.MaxAge)
+	}
+	if len(users.deleted) != 1 || users.deleted[0] != testEmail {
+		t.Errorf("DeleteUser calls = %v, want [%q]", users.deleted, testEmail)
+	}
+	if len(authService.loggedOutAll) != 1 || authService.loggedOutAll[0] != testEmail {
+		t.Errorf("LogoutAll calls = %v, want [%q]", authService.loggedOutAll, testEmail)
+	}
+}
+
+func TestDeleteKeepsProfileWhenSessionRevocationFails(t *testing.T) {
+	authService := &stubAuthService{
+		identity:     auth.Identity{Email: testEmail},
+		logoutAllErr: errors.New("store unavailable"),
+	}
+	users := newStubUserStore()
+	users.users[testEmail] = database.UserAccount{Email: testEmail, Active: true}
+	server := newTestServer(t, authService, users)
+
+	recorder := postAuthedForm(t, server, "/account/delete", nil)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusInternalServerError)
+	}
+	if len(users.deleted) != 0 {
+		t.Errorf("profile was deleted although sessions could not be revoked: %v", users.deleted)
+	}
+}
+
+func TestRenderFailureIsInternalError(t *testing.T) {
+	server := newTestServerWith(t, ServerConfig{
+		AuthService:       &stubAuthService{},
+		Users:             newStubUserStore(),
+		PagesRenderer:     stubRenderer{err: errors.New("boom")},
+		SessionCookieName: secureSessionCookieName,
+	})
+
+	recorder := getWithCookie(t, server, "/sign-in", "")
+	if recorder.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestAuthErrorStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		err    error
+		status int
+	}{
+		{"rate limited", auth.ErrRateLimited, http.StatusTooManyRequests},
+		{"invalid email", auth.ErrInvalidEmail, http.StatusBadRequest},
+		{"unauthenticated", auth.ErrUnauthenticated, http.StatusUnauthorized},
+		{"invalid input", ErrInvalidInput, http.StatusBadRequest},
+		{"unexpected", errors.New("boom"), http.StatusInternalServerError},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			status, _ := authErrorStatus(tc.err)
+			if status != tc.status {
+				t.Errorf("status = %d, want %d", status, tc.status)
+			}
+		})
+	}
 }
