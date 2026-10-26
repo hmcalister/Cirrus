@@ -44,10 +44,9 @@ func setValidEnv(t *testing.T) {
 		envEmailRateLimitGlobalInterval:       "1s",
 		envEmailRateLimitSweepCadenceDuration: "1m",
 
-		envAuthVerificationExpiry: "24h",
-		envAuthResetExpiry:        "1h",
-		envAuthSessionExpiry:      "720h",
-		envAuthBaseURL:            "https://cloud.example.com",
+		envAuthLinkExpiry:    "15m",
+		envAuthSessionExpiry: "720h",
+		envAuthBaseURL:       "https://cloud.example.com",
 	} {
 		t.Setenv(key, value)
 	}
@@ -75,6 +74,9 @@ func TestLoadValid(t *testing.T) {
 	}
 	if cfg.EmailRateLimit.AddressBurst != 5 || cfg.EmailRateLimit.GlobalBurst != 100 {
 		t.Errorf("EmailRateLimit = %+v", cfg.EmailRateLimit)
+	}
+	if cfg.Auth.LinkExpiryDuration != 15*time.Minute {
+		t.Errorf("Auth.LinkExpiryDuration = %v", cfg.Auth.LinkExpiryDuration)
 	}
 	if cfg.Auth.SessionExpiryDuration != 720*time.Hour {
 		t.Errorf("Auth.SessionExpiryDuration = %v", cfg.Auth.SessionExpiryDuration)
