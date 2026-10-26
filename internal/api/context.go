@@ -1,21 +1,25 @@
 package api
 
-import "context"
+import (
+	"context"
+
+	"github.com/hmcalister/cirrus/internal/database"
+)
 
 type contextKey struct{}
 
 var (
-	userEmailKey = contextKey{}
+	userKey      = contextKey{}
 	requestIDKey = contextKey{}
 )
 
-func withEmail(ctx context.Context, userEmail string) context.Context {
-	return context.WithValue(ctx, userEmailKey, userEmail)
+func withUser(ctx context.Context, user database.UserAccount) context.Context {
+	return context.WithValue(ctx, userKey, user)
 }
 
-func emailFromContext(ctx context.Context) string {
-	userEmail, _ := ctx.Value(userEmailKey).(string)
-	return userEmail
+func userFromContext(ctx context.Context) (database.UserAccount, bool) {
+	user, ok := ctx.Value(userKey).(database.UserAccount)
+	return user, ok
 }
 
 func withRequestID(ctx context.Context, requestID string) context.Context {
