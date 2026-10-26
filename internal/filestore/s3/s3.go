@@ -74,7 +74,9 @@ func (s *Store) GetFile(ctx context.Context, name string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("getting %s from bucket %s: %w", name, s.bucket, err)
 	}
-	defer object.Body.Close()
+	defer func() {
+		_ = object.Body.Close()
+	}()
 
 	data, err := io.ReadAll(object.Body)
 	if err != nil {
