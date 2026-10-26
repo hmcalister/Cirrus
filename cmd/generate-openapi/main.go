@@ -16,6 +16,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/hmcalister/cirrus/internal/api"
 	"github.com/hmcalister/cirrus/internal/database"
+	"github.com/hmcalister/cirrus/internal/filestore"
 	"github.com/hmcalister/skysatchel/pkg/email/skysender"
 	"github.com/hmcalister/stratus/pkg/auth"
 	"github.com/hmcalister/stratus/pkg/sessionstore"
@@ -34,6 +35,14 @@ func (noOpUserStore) SetActive(context.Context, database.SetActiveParams) error 
 
 func (noOpUserStore) DeleteUser(context.Context, string) error {
 	return nil
+}
+
+func (noOpUserStore) CountUsers(context.Context) (int64, error) {
+	return 0, nil
+}
+
+func (noOpUserStore) CountActiveUsers(context.Context) (int64, error) {
+	return 0, nil
 }
 
 func main() {
@@ -61,6 +70,7 @@ func main() {
 	server, err := api.NewServer(mux, humaAPI, api.ServerConfig{
 		AuthService:       authService,
 		Users:             noOpUserStore{},
+		Files:             filestore.NoOpStore{},
 		SessionCookieName: api.SessionCookieName(true),
 	})
 	if err != nil {
