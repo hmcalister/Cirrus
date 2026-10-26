@@ -16,7 +16,6 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/hmcalister/cirrus/internal/api"
 	"github.com/hmcalister/cirrus/internal/database"
-	templates "github.com/hmcalister/cirrus/internal/template"
 	"github.com/hmcalister/skysatchel/pkg/email/skysender"
 	"github.com/hmcalister/stratus/pkg/auth"
 	"github.com/hmcalister/stratus/pkg/sessionstore"
@@ -41,11 +40,6 @@ func main() {
 	outPath := flag.String("o", "", "output file (default stdout)")
 	flag.Parse()
 
-	loader, err := templates.New()
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	authService, err := auth.New(auth.AuthServiceConfig{
 		Sender:     skysender.NoOpSender{},
 		Sessions:   sessionstore.NewMemorySessionStore(),
@@ -67,8 +61,6 @@ func main() {
 	server, err := api.NewServer(mux, humaAPI, api.ServerConfig{
 		AuthService:       authService,
 		Users:             noOpUserStore{},
-		PagesRenderer:     loader,
-		CookieSecure:      true,
 		SessionCookieName: api.SessionCookieName(true),
 	})
 	if err != nil {

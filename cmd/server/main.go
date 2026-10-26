@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,13 +17,18 @@ import (
 	"github.com/hmcalister/cirrus/internal/database"
 	"github.com/hmcalister/cirrus/internal/logging"
 	"github.com/hmcalister/cirrus/internal/postgres"
-	templates "github.com/hmcalister/cirrus/internal/template"
 	skysatchel "github.com/hmcalister/skysatchel/pkg/email"
 	"github.com/hmcalister/skysatchel/pkg/email/skysender"
 	"github.com/hmcalister/skysatchel/pkg/email/skysender/ratelimit"
 	"github.com/hmcalister/stratus/pkg/auth"
 	"github.com/hmcalister/stratus/pkg/sessionstore"
 )
+
+const magicLinkEmailBody = `Sign in to Cirrus by visiting the link below:
+
+%s
+
+This link expires shortly and can only be used once. If you did not request it, you can ignore this email.`
 
 func main() {
 	if err := run(); err != nil {
@@ -37,19 +43,6 @@ func run() error {
 		return err
 	}
 	logging.Setup(cfg.Debug)
-
-	// Templates are embedded in the binary (internal/template/embed.go), so a
-	// content change is a code change: rebuild and redeploy. Parsing happens
-	// here, once, at startup.
-	//
-	// New parses every *.tmpl in the embedded FS (catching malformed templates)
-	// and fails if any name in the package's required lists is absent. The lists
-	// are code, not configuration; they live in the template package beside the
-	// constants.
-	templateLoader, err := templates.New()
-	if err != nil {
-		return err
-	}
 
 	// Cancelled on SIGINT/SIGTERM
 	// i.e. how Podman compose stops the container.
@@ -104,14 +97,9 @@ func run() error {
 			Secure: cookieSecure,
 		},
 		LinkEmail: func(link string) skysatchel.Message {
-			body, err := templateLoader.RenderEmail(templates.TemplateMagicLink, struct{ Link string }{Link: link})
-			if err != nil {
-				slog.Error("error rendering sign-in email", "err", err)
-				body = "Sign in to Cirrus: " + link
-			}
 			return skysatchel.Message{
 				Subject: "Sign in to Cirrus",
-				Body:    body,
+				Body:    fmt.Sprintf(magicLinkEmailBody, link),
 			}
 		},
 	})
@@ -128,8 +116,6 @@ func run() error {
 	apiServer, err := api.NewServer(mux, humaAPI, api.ServerConfig{
 		AuthService:       authService,
 		Users:             database.New(pool),
-		PagesRenderer:     templateLoader,
-		CookieSecure:      cookieSecure,
 		SessionCookieName: sessionCookieName,
 	})
 	if err != nil {
