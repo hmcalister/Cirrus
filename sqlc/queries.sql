@@ -11,3 +11,7 @@ UPDATE user_accounts SET active = $2 WHERE email = $1;
 
 -- name: DeleteUser :exec
 DELETE FROM user_accounts WHERE email = $1;
+
+-- Returns the address of every user who still receives daily emails.
+-- name: ListActiveEmails :many
+SELECT email FROM user_accounts WHERE active ORDER BY email;
