@@ -62,6 +62,7 @@ func (s *Server) registerOperations() {
 	s.registerAccountOperation()
 	s.registerSetActiveOperation()
 	s.registerDeleteAccountOperation()
+	s.registerAdminStatsOperation()
 }
 
 // --------------------------------------------------------------------------------
@@ -217,4 +218,56 @@ func (s *Server) handleDeleteAccount(ctx context.Context, _ *struct{}) (*deleteA
 
 	slog.Info("account deleted", "request_id", requestIDFromContext(ctx), "email_hash", hashEmail(user.Email))
 	return &deleteAccountOutput{}, nil
+}
+
+// --------------------------------------------------------------------------------
+// ADMIN STATS
+
+type AdminStats struct {
+	UserAccounts   int64 `json:"user_accounts" doc:"Number of user accounts."`
+	ActiveUsers    int64 `json:"active_users" doc:"Number of users who still receive daily emails."`
+	RemainingFiles int   `json:"remaining_files" doc:"Number of cloud images left to send."`
+}
+
+type adminStatsOutput struct {
+	Body AdminStats
+}
+
+func (s *Server) registerAdminStatsOperation() {
+	huma.Register(s.api, huma.Operation{
+		OperationID:   "get-admin-stats",
+		Method:        http.MethodGet,
+		Path:          "/api/admin/stats",
+		Tags:          []string{"admin"},
+		Summary:       "Get application statistics",
+		DefaultStatus: http.StatusOK,
+		Errors:        []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusInternalServerError},
+		Middlewares:   huma.Middlewares{s.requireUser, s.makeRequiredRoleMiddleware("admin")},
+	}, s.handleAdminStats)
+}
+
+func (s *Server) handleAdminStats(ctx context.Context, _ *struct{}) (*adminStatsOutput, error) {
+	userAccounts, err := s.Users.CountUsers(ctx)
+	if err != nil {
+		slog.Warn("error when counting user accounts", "request_id", requestIDFromContext(ctx), "err", err)
+		return nil, huma.Error500InternalServerError("unable to load statistics")
+	}
+
+	activeUsers, err := s.Users.CountActiveUsers(ctx)
+	if err != nil {
+		slog.Warn("error when counting active users", "request_id", requestIDFromContext(ctx), "err", err)
+		return nil, huma.Error500InternalServerError("unable to load statistics")
+	}
+
+	files, err := s.Files.ListFiles(ctx)
+	if err != nil {
+		slog.Warn("error when listing cloud images", "request_id", requestIDFromContext(ctx), "err", err)
+		return nil, huma.Error500InternalServerError("unable to load statistics")
+	}
+
+	out := &adminStatsOutput{}
+	out.Body.UserAccounts = userAccounts
+	out.Body.ActiveUsers = activeUsers
+	out.Body.RemainingFiles = len(files)
+	return out, nil
 }
