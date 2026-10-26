@@ -27,32 +27,22 @@ const (
 // Template names.
 // Define the filename here, and add to one of the required lists below.
 const (
-	TemplateVerification  = "verification.tmpl"
-	TemplatePasswordReset = "password_reset.tmpl"
+	TemplateMagicLink = "magic_link.tmpl"
 
-	TemplatePageSignIn               = "sign_in.tmpl"
-	TemplatePageRegister             = "register.tmpl"
-	TemplatePageAccount              = "account.tmpl"
-	TemplatePageReset                = "reset.tmpl"
-	TemplatePagePasswordResetRequest = "password_reset_request.tmpl"
-	TemplatePageVerifyResend         = "verify_resend.tmpl"
-	templateMessageFragment          = "message.tmpl"
-	templateLayout                   = "layout.tmpl"
-	templateAccountStatus            = "account_status.tmpl"
+	TemplatePageSignIn      = "sign_in.tmpl"
+	TemplatePageAccount     = "account.tmpl"
+	templateMessageFragment = "message.tmpl"
+	templateLayout          = "layout.tmpl"
+	templateAccountStatus   = "account_status.tmpl"
 )
 
 var (
 	requiredEmailTemplates = []string{
-		TemplateVerification,
-		TemplatePasswordReset,
+		TemplateMagicLink,
 	}
 	requiredWebTemplates = []string{
 		TemplatePageSignIn,
-		TemplatePageRegister,
 		TemplatePageAccount,
-		TemplatePageReset,
-		TemplatePagePasswordResetRequest,
-		TemplatePageVerifyResend,
 		templateMessageFragment,
 		templateLayout,
 		templateAccountStatus,
