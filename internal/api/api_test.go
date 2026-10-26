@@ -13,6 +13,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/hmcalister/cirrus/internal/database"
+	"github.com/hmcalister/cirrus/internal/filestore"
 	skysatchel "github.com/hmcalister/skysatchel/pkg/email"
 	"github.com/hmcalister/skysatchel/pkg/email/skysender"
 	"github.com/hmcalister/stratus/pkg/auth"
@@ -56,6 +57,7 @@ type stubUserStore struct {
 	getErr       error
 	setActiveErr error
 	deleteErr    error
+	countErr     error
 
 	deleted []string
 }
@@ -102,7 +104,50 @@ func (s *stubUserStore) DeleteUser(_ context.Context, email string) error {
 	return nil
 }
 
+func (s *stubUserStore) CountUsers(_ context.Context) (int64, error) {
+	if s.countErr != nil {
+		return 0, s.countErr
+	}
+	return int64(len(s.users)), nil
+}
+
+func (s *stubUserStore) CountActiveUsers(_ context.Context) (int64, error) {
+	if s.countErr != nil {
+		return 0, s.countErr
+	}
+
+	var count int64
+	for _, user := range s.users {
+		if user.Active {
+			count++
+		}
+	}
+	return count, nil
+}
+
 var _ userStore = (*stubUserStore)(nil)
+
+type stubFileStore struct {
+	files []string
+	err   error
+}
+
+func (s *stubFileStore) ListFiles(_ context.Context) ([]string, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.files, nil
+}
+
+func (s *stubFileStore) GetFile(_ context.Context, _ string) ([]byte, error) {
+	return nil, nil
+}
+
+func (s *stubFileStore) DeleteFile(_ context.Context, _ string) error {
+	return nil
+}
+
+var _ filestore.FileGetter = (*stubFileStore)(nil)
 
 func newTestServer(t *testing.T, authService *stubAuthService, users *stubUserStore) *Server {
 	t.Helper()
@@ -117,6 +162,7 @@ func newTestServer(t *testing.T, authService *stubAuthService, users *stubUserSt
 	return newTestServerWith(t, ServerConfig{
 		AuthService:       authService,
 		Users:             users,
+		Files:             &stubFileStore{},
 		SessionCookieName: secureSessionCookieName,
 	})
 }
@@ -193,6 +239,7 @@ func TestNewServerValidation(t *testing.T) {
 	valid := ServerConfig{
 		AuthService:       &stubAuthService{},
 		Users:             newStubUserStore(),
+		Files:             &stubFileStore{},
 		SessionCookieName: secureSessionCookieName,
 	}
 
@@ -202,6 +249,7 @@ func TestNewServerValidation(t *testing.T) {
 	}{
 		{"nil auth service", func(c *ServerConfig) { c.AuthService = nil }},
 		{"nil user store", func(c *ServerConfig) { c.Users = nil }},
+		{"nil file store", func(c *ServerConfig) { c.Files = nil }},
 		{"empty cookie name", func(c *ServerConfig) { c.SessionCookieName = "" }},
 	}
 	for _, tc := range tests {
@@ -341,6 +389,75 @@ func TestProfileCreationFailureIsInternalError(t *testing.T) {
 	}
 }
 
+func TestAdminStats(t *testing.T) {
+	users := newStubUserStore()
+	users.users["admin@example.com"] = database.UserAccount{Email: "admin@example.com", Active: true, Roles: []string{"admin"}}
+	users.users["active@example.com"] = database.UserAccount{Email: "active@example.com", Active: true}
+	users.users["paused@example.com"] = database.UserAccount{Email: "paused@example.com", Active: false}
+
+	server := newTestServerWith(t, ServerConfig{
+		AuthService:       &stubAuthService{identity: auth.Identity{Email: "admin@example.com"}},
+		Users:             users,
+		Files:             &stubFileStore{files: []string{"one.jpg", "two.jpg"}},
+		SessionCookieName: secureSessionCookieName,
+	})
+
+	recorder := getWithCookie(t, server, "/api/admin/stats", testToken)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	body := decodeBody[AdminStats](t, recorder)
+	if body.UserAccounts != 3 {
+		t.Errorf("user accounts = %d, want 3", body.UserAccounts)
+	}
+	if body.ActiveUsers != 2 {
+		t.Errorf("active users = %d, want 2", body.ActiveUsers)
+	}
+	if body.RemainingFiles != 2 {
+		t.Errorf("remaining files = %d, want 2", body.RemainingFiles)
+	}
+}
+
+func TestAdminStatsForbiddenForStandardUser(t *testing.T) {
+	server := newTestServer(t, &stubAuthService{identity: auth.Identity{Email: testEmail}}, nil)
+
+	recorder := getWithCookie(t, server, "/api/admin/stats", testToken)
+	if recorder.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusForbidden)
+	}
+}
+
+func TestAdminStatsFailureIsInternalError(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(*stubUserStore, *stubFileStore)
+	}{
+		{"user count", func(users *stubUserStore, _ *stubFileStore) { users.countErr = errors.New("database down") }},
+		{"file listing", func(_ *stubUserStore, files *stubFileStore) { files.err = errors.New("bucket down") }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			users := newStubUserStore()
+			users.users["admin@example.com"] = database.UserAccount{Email: "admin@example.com", Active: true, Roles: []string{"admin"}}
+			files := &stubFileStore{}
+			tc.mutate(users, files)
+
+			server := newTestServerWith(t, ServerConfig{
+				AuthService:       &stubAuthService{identity: auth.Identity{Email: "admin@example.com"}},
+				Users:             users,
+				Files:             files,
+				SessionCookieName: secureSessionCookieName,
+			})
+
+			recorder := getWithCookie(t, server, "/api/admin/stats", testToken)
+			if recorder.Code != http.StatusInternalServerError {
+				t.Errorf("status = %d, want %d", recorder.Code, http.StatusInternalServerError)
+			}
+		})
+	}
+}
+
 // Registers a test-only operation behind the given middleware chain, so the
 // role middleware can be exercised through the real routing and session
 // validation.
@@ -445,6 +562,7 @@ func TestMagicLinkSignInFlow(t *testing.T) {
 	server := newTestServerWith(t, ServerConfig{
 		AuthService:       authService,
 		Users:             users,
+		Files:             &stubFileStore{},
 		SessionCookieName: secureSessionCookieName,
 	})
 
@@ -493,7 +611,7 @@ func TestOpenAPIDocumentsOperations(t *testing.T) {
 	server := newTestServer(t, &stubAuthService{}, nil)
 
 	paths := server.OpenAPI().Paths
-	for _, path := range []string{"/healthz", "/api/account", "/api/account/active"} {
+	for _, path := range []string{"/healthz", "/api/account", "/api/account/active", "/api/admin/stats"} {
 		if paths[path] == nil {
 			t.Errorf("OpenAPI document is missing path %q", path)
 		}
