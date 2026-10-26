@@ -11,6 +11,8 @@ type userStore interface {
 	GetOrCreateUser(ctx context.Context, email string) (database.UserAccount, error)
 	SetActive(ctx context.Context, arg database.SetActiveParams) error
 	DeleteUser(ctx context.Context, email string) error
+	CountUsers(ctx context.Context) (int64, error)
+	CountActiveUsers(ctx context.Context) (int64, error)
 }
 
 var _ userStore = (database.Querier)(nil)
