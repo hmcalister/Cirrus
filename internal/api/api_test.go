@@ -341,6 +341,74 @@ func TestProfileCreationFailureIsInternalError(t *testing.T) {
 	}
 }
 
+// Registers a test-only operation behind the given middleware chain, so the
+// role middleware can be exercised through the real routing and session
+// validation.
+func registerTestOperation(server *Server, operationID, path string, middlewares huma.Middlewares) {
+	huma.Register(server.api, huma.Operation{
+		OperationID:   operationID,
+		Method:        http.MethodGet,
+		Path:          path,
+		DefaultStatus: http.StatusOK,
+		Middlewares:   middlewares,
+	}, func(_ context.Context, _ *struct{}) (*struct{}, error) {
+		return &struct{}{}, nil
+	})
+}
+
+func TestRequiredRoleMiddleware(t *testing.T) {
+	tests := []struct {
+		name       string
+		roles      []string
+		wantStatus int
+	}{
+		{"holds role", []string{"admin"}, http.StatusOK},
+		{"lacks role", []string{"other"}, http.StatusForbidden},
+		{"no roles", nil, http.StatusForbidden},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			users := newStubUserStore()
+			users.users[testEmail] = database.UserAccount{Email: testEmail, Active: true, Roles: tc.roles}
+			server := newTestServer(t, &stubAuthService{identity: auth.Identity{Email: testEmail}}, users)
+			registerTestOperation(server, "test-required-role", "/api/test-required-role", huma.Middlewares{
+				server.requireUser,
+				server.makeRequiredRoleMiddleware("admin"),
+			})
+
+			recorder := getWithCookie(t, server, "/api/test-required-role", testToken)
+			if recorder.Code != tc.wantStatus {
+				t.Errorf("status = %d, want %d", recorder.Code, tc.wantStatus)
+			}
+		})
+	}
+}
+
+func TestRequiredRoleMiddlewareRequiresSession(t *testing.T) {
+	server := newTestServer(t, nil, nil)
+	registerTestOperation(server, "test-required-role-session", "/api/test-required-role-session", huma.Middlewares{
+		server.requireUser,
+		server.makeRequiredRoleMiddleware("admin"),
+	})
+
+	recorder := getWithCookie(t, server, "/api/test-required-role-session", "")
+	if recorder.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestRequiredRoleMiddlewareWithoutProfileIsInternalError(t *testing.T) {
+	server := newTestServer(t, nil, nil)
+	registerTestOperation(server, "test-required-role-no-profile", "/api/test-required-role-no-profile", huma.Middlewares{
+		server.makeRequiredRoleMiddleware("admin"),
+	})
+
+	recorder := getWithCookie(t, server, "/api/test-required-role-no-profile", "")
+	if recorder.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusInternalServerError)
+	}
+}
+
 type captureSender struct {
 	sent []skysender.SendParams
 }
