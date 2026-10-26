@@ -21,3 +21,7 @@ SELECT COUNT(*) FROM user_accounts;
 
 -- name: CountActiveUsers :one
 SELECT COUNT(*) FROM user_accounts WHERE active;
+
+-- Returns the address of every user who holds the admin role.
+-- name: ListAdminEmails :many
+SELECT email FROM user_accounts WHERE roles @> ARRAY['admin']::TEXT[] ORDER BY email;
