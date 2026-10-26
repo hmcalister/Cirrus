@@ -21,18 +21,18 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     go run ./cmd/generate-openapi -o /openapi.yaml
 
-FROM docker.io/oven/bun:1 AS web-build
+FROM docker.io/library/node:22-alpine AS web-build
 
 WORKDIR /web
 
-COPY web/package.json web/bun.lock ./
-RUN --mount=type=cache,target=/root/.bun/install/cache \
-    bun install --frozen-lockfile
+COPY web/package.json web/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 COPY web ./
 COPY --from=openapi /openapi.yaml /openapi.yaml
-RUN bun run openapi
-RUN bun run build
+RUN npm run openapi
+RUN npm run build
 
 FROM docker.io/library/golang:1.27-alpine AS build
 
