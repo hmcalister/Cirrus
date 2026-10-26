@@ -27,11 +27,17 @@ import (
 const (
 	dailyEmailSubject = "Cloud Mail`"
 	dailyEmailBody    = "Enjoy the clouds today!"
+
+	lowImageThreshold = 7
+	lowImageSubject   = "Cloud images running low"
+	lowImageBody      = "Only %d cloud images remain."
 )
 
-// Lists the addresses that receive the daily email.
+// Lists the addresses that receive the daily email, and the admins who are
+// alerted when images run low.
 type userLister interface {
 	ListActiveEmails(ctx context.Context) ([]string, error)
+	ListAdminEmails(ctx context.Context) ([]string, error)
 }
 
 // The cloud image shared by every email in one run.
@@ -166,9 +172,50 @@ func (d dailyEmailer) send(ctx context.Context) error {
 		if err := d.files.DeleteFile(ctx, cloud.name); err != nil {
 			slog.Warn("failed to delete sent cloud image", "name", cloud.name, "error", err)
 		}
+
+		if err := d.alertWhenImagesLow(ctx); err != nil {
+			slog.Warn("failed to alert admins about low images", "error", err)
+		}
 	}
 
 	return nil
+}
+
+// Emails every admin when lowImageThreshold files or fewer remain in the store.
+func (d dailyEmailer) alertWhenImagesLow(ctx context.Context) error {
+	names, err := d.files.ListFiles(ctx)
+	if err != nil {
+		return fmt.Errorf("listing cloud images: %w", err)
+	}
+	if len(names) > lowImageThreshold {
+		return nil
+	}
+
+	admins, err := d.users.ListAdminEmails(ctx)
+	if err != nil {
+		return fmt.Errorf("listing admins: %w", err)
+	}
+	if len(admins) == 0 {
+		slog.Warn("cloud images are low but there are no admins to alert", "remaining", len(names))
+		return nil
+	}
+
+	if err := d.sendAdminAlert(ctx, admins, len(names)); err != nil {
+		return fmt.Errorf("sending low image alert: %w", err)
+	}
+
+	slog.Info("alerted admins about low cloud images", "remaining", len(names), "admins", len(admins))
+	return nil
+}
+
+// Sends the low image alert to every admin in one BCC'd message.
+func (d dailyEmailer) sendAdminAlert(ctx context.Context, admins []string, remaining int) error {
+	return d.sender.Send(ctx, skysender.SendParams{
+		Subject:       lowImageSubject,
+		Body:          fmt.Sprintf(lowImageBody, remaining),
+		ToRecipients:  []string{d.fromAddress},
+		BCCRecipients: admins,
+	})
 }
 
 // Picks the one cloud image used by every email of this run.
