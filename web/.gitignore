@@ -1,0 +1,21 @@
+
+node_modules/
+dist/*
+
+# Vue/Vite/Nuxt UI build artifacts.
+.nuxt/
+.output/
+.vite/
+auto-imports.d.ts
+components.d.ts
+*.log
+
+# Web toolchain caches.
+.turbo/
+tsconfig.tsbuildinfo
+
+# OpenAPI spec
+src/api/schema.d.ts
+
+# Keep the dist directory file
+!dist/.gitkeep
