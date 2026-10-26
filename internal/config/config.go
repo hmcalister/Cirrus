@@ -47,10 +47,9 @@ const (
 	envEmailRateLimitGlobalInterval       = "EMAIL_RATE_LIMIT_GLOBAL_INTERVAL"
 	envEmailRateLimitSweepCadenceDuration = "EMAIL_RATE_LIMIT_SWEEP_CADENCE"
 
-	envAuthVerificationExpiry = "AUTH_VERIFICATION_EXPIRY"
-	envAuthResetExpiry        = "AUTH_RESET_EXPIRY"
-	envAuthSessionExpiry      = "AUTH_SESSION_EXPIRY"
-	envAuthBaseURL            = "AUTH_BASE_URL"
+	envAuthLinkExpiry    = "AUTH_LINK_EXPIRY"
+	envAuthSessionExpiry = "AUTH_SESSION_EXPIRY"
+	envAuthBaseURL       = "AUTH_BASE_URL"
 )
 
 type DatabaseConfig struct {
@@ -90,9 +89,10 @@ type EmailRateLimitConfig struct {
 }
 
 type AuthenticationConfig struct {
-	VerificationExpiryDuration time.Duration
-	ResetExpiryDuration        time.Duration
-	SessionExpiryDuration      time.Duration
+	// How long a magic sign-in link remains valid.
+	LinkExpiryDuration time.Duration
+	// How long a signed-in session remains valid.
+	SessionExpiryDuration time.Duration
 }
 
 type AuthHTTPConfig struct {
@@ -181,9 +181,8 @@ func Load() (Config, error) {
 			SweepCadenceDuration: require_duration(envEmailRateLimitSweepCadenceDuration),
 		},
 		Auth: AuthenticationConfig{
-			VerificationExpiryDuration: require_duration(envAuthVerificationExpiry),
-			ResetExpiryDuration:        require_duration(envAuthResetExpiry),
-			SessionExpiryDuration:      require_duration(envAuthSessionExpiry),
+			LinkExpiryDuration:    require_duration(envAuthLinkExpiry),
+			SessionExpiryDuration: require_duration(envAuthSessionExpiry),
 		},
 		AuthHTTP: AuthHTTPConfig{
 			BaseURL: require_string(envAuthBaseURL),
