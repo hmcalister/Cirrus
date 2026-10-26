@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AccountView from './views/AccountView.vue'
+import AdminView from './views/AdminView.vue'
 import SignInView from './views/SignInView.vue'
 
 export default createRouter({
@@ -8,5 +9,6 @@ export default createRouter({
     { path: '/', redirect: '/account' },
     { path: '/sign-in', name: 'sign-in', component: SignInView },
     { path: '/account', name: 'account', component: AccountView },
+    { path: '/admin', name: 'admin', component: AdminView },
   ],
 })
