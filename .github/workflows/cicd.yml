@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 env:
-  SQLC_VERSION: "1.30.0"
+  SQLC_VERSION: "1.31.1"
 
 jobs:
   build-image:
