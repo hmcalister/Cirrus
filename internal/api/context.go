@@ -13,10 +13,6 @@ var (
 	requestIDKey = contextKey{}
 )
 
-func withUser(ctx context.Context, user database.UserAccount) context.Context {
-	return context.WithValue(ctx, userKey, user)
-}
-
 func userFromContext(ctx context.Context) (database.UserAccount, bool) {
 	user, ok := ctx.Value(userKey).(database.UserAccount)
 	return user, ok

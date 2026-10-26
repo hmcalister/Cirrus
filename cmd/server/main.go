@@ -10,6 +10,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/hmcalister/cirrus/internal/api"
 	"github.com/hmcalister/cirrus/internal/config"
 	"github.com/hmcalister/cirrus/internal/database"
@@ -118,10 +119,15 @@ func run() error {
 		return err
 	}
 
-	apiServer, err := api.NewServer(api.ServerConfig{
+	// The standard-library mux carries every route: Huma operations, the Stratus
+	// auth operations, and the embedded static assets.
+	mux := http.NewServeMux()
+	humaAPI := humago.New(mux, api.NewHumaConfig())
+	authService.RegisterHumaHandlers(humaAPI)
+
+	apiServer, err := api.NewServer(mux, humaAPI, api.ServerConfig{
 		AuthService:       authService,
 		Users:             database.New(pool),
-		AuthHandlers:      authService.AuthHandlers(),
 		PagesRenderer:     templateLoader,
 		CookieSecure:      cookieSecure,
 		SessionCookieName: sessionCookieName,
