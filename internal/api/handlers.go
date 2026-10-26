@@ -91,11 +91,13 @@ func (s *Server) registerHealthOperation() {
 // --------------------------------------------------------------------------------
 // ACCOUNT
 
+type Account struct {
+	Email  string `json:"email" doc:"Signed-in email address."`
+	Active bool   `json:"active" doc:"Whether daily emails are delivered."`
+}
+
 type accountOutput struct {
-	Body struct {
-		Email  string `json:"email" doc:"Signed-in email address."`
-		Active bool   `json:"active" doc:"Whether daily emails are delivered."`
-	}
+	Body Account
 }
 
 func (s *Server) registerAccountOperation() {
@@ -126,16 +128,20 @@ func (s *Server) handleAccount(ctx context.Context, _ *struct{}) (*accountOutput
 // --------------------------------------------------------------------------------
 // SET ACTIVE
 
+type SetActiveInput struct {
+	Active bool `json:"active" required:"true" doc:"Whether daily emails should be delivered."`
+}
+
 type setActiveInput struct {
-	Body struct {
-		Active bool `json:"active" required:"true" doc:"Whether daily emails should be delivered."`
-	}
+	Body SetActiveInput
+}
+
+type SetActiveOutput struct {
+	Active bool `json:"active" doc:"Whether daily emails are delivered."`
 }
 
 type setActiveOutput struct {
-	Body struct {
-		Active bool `json:"active" doc:"Whether daily emails are delivered."`
-	}
+	Body SetActiveOutput
 }
 
 func (s *Server) registerSetActiveOperation() {
