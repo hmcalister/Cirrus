@@ -31,6 +31,9 @@ x-server-environment: &server-environment
   AUTH_BASE_URL: ${AUTH_BASE_URL:-http://localhost:8080}
   AUTH_LINK_EXPIRY: ${AUTH_LINK_EXPIRY:-15m}
   AUTH_SESSION_EXPIRY: ${AUTH_SESSION_EXPIRY:-24h}
+  S3_BUCKET: ${S3_BUCKET}
+  S3_REGION: ${S3_REGION}
+  S3_ENDPOINT: ${S3_ENDPOINT:-}
 
 x-mailer-environment: &mailer-environment
   <<: *common-environment
