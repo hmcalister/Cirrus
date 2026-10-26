@@ -15,6 +15,7 @@ import (
 	"github.com/hmcalister/cirrus/internal/api"
 	"github.com/hmcalister/cirrus/internal/config"
 	"github.com/hmcalister/cirrus/internal/database"
+	"github.com/hmcalister/cirrus/internal/filestore/s3"
 	"github.com/hmcalister/cirrus/internal/logging"
 	"github.com/hmcalister/cirrus/internal/postgres"
 	skysatchel "github.com/hmcalister/skysatchel/pkg/email"
@@ -54,6 +55,11 @@ func run() error {
 		return err
 	}
 	defer pool.Close()
+
+	files, err := s3.New(ctx, cfg.S3)
+	if err != nil {
+		return fmt.Errorf("connecting to cloud image bucket: %w", err)
+	}
 
 	emailSender, err := skysender.NewSMTPSender(skysender.SMTPConfig{
 		Host:        cfg.Email.Host,
@@ -114,6 +120,7 @@ func run() error {
 	apiServer, err := api.NewServer(mux, humaAPI, api.ServerConfig{
 		AuthService:       authService,
 		Users:             database.New(pool),
+		Files:             files,
 		SessionCookieName: sessionCookieName,
 	})
 	if err != nil {
