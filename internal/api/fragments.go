@@ -11,7 +11,3 @@ type fragmentData struct {
 func errorFragment(message string) fragmentData {
 	return fragmentData{Kind: "error", Message: message}
 }
-
-func statusFragment(message string) fragmentData {
-	return fragmentData{Kind: "status", Message: message}
-}

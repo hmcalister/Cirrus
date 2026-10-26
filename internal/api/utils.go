@@ -41,11 +41,6 @@ func sessionToken(r *http.Request, cookieName string) string {
 	return ""
 }
 
-// Returns a trimmed form value.
-func formValue(r *http.Request, name string) string {
-	return strings.TrimSpace(r.PostFormValue(name))
-}
-
 // Redirects an HTMX request with HTTP 303 and the HX-Redirect header.
 func writeHXRedirect(w http.ResponseWriter, location string) {
 	w.Header().Set("HX-Redirect", location)
