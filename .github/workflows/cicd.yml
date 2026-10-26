@@ -75,4 +75,11 @@ jobs:
           fi
 
       - run: go build ./...
-      - run: go test -race ./...
+      - run: go test -race -coverprofile=cover.out -covermode=atomic ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: cover.out
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
