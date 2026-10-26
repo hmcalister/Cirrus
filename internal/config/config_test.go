@@ -91,6 +91,9 @@ func TestLoadServer(t *testing.T) {
 	if cfg.AuthHTTP.BaseURL != "https://cloud.example.com" {
 		t.Errorf("AuthHTTP.BaseURL = %q", cfg.AuthHTTP.BaseURL)
 	}
+	if cfg.S3.Bucket != "cirrus-clouds" || cfg.S3.Region != "nyc3" {
+		t.Errorf("S3 = %+v", cfg.S3)
+	}
 	if !cfg.Debug {
 		t.Error("Debug = false, want true")
 	}
@@ -135,12 +138,11 @@ func TestLoadServerMalformedVariable(t *testing.T) {
 	}
 }
 
-// The server does not send the daily email, so it must not need its settings.
-func TestLoadServerIgnoresMailerVariables(t *testing.T) {
+// The server does not schedule the daily email, so it must not need its settings.
+func TestLoadServerIgnoresDailyEmailVariables(t *testing.T) {
 	setValidEnv(t)
 	t.Setenv(envDailyEmailTime, "")
-	t.Setenv(envS3Bucket, "")
-	t.Setenv(envS3Region, "")
+	t.Setenv(envDailyEmailBCCBatchSize, "")
 
 	if _, err := LoadServer(); err != nil {
 		t.Fatalf("LoadServer() err = %v, want nil", err)
