@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/hmcalister/cirrus/internal/database"
 	templates "github.com/hmcalister/cirrus/internal/template"
 	skysatchel "github.com/hmcalister/skysatchel/pkg/email"
@@ -54,6 +56,8 @@ func (s *stubAuthService) LogoutAll(_ context.Context, userEmail string) error {
 	s.loggedOutAll = append(s.loggedOutAll, userEmail)
 	return s.logoutAllErr
 }
+
+func (s *stubAuthService) RegisterHumaHandlers(huma.API) {}
 
 var _ authService = (*stubAuthService)(nil)
 
@@ -148,7 +152,11 @@ func newTestServer(t *testing.T, authService *stubAuthService, users *stubUserSt
 func newTestServerWith(t *testing.T, cfg ServerConfig) *Server {
 	t.Helper()
 
-	server, err := NewServer(cfg)
+	mux := http.NewServeMux()
+	humaAPI := humago.New(mux, NewHumaConfig())
+	cfg.AuthService.RegisterHumaHandlers(humaAPI)
+
+	server, err := NewServer(mux, humaAPI, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,34 +240,19 @@ func TestNewServerValidation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := valid
 			tc.mutate(&cfg)
-			if _, err := NewServer(cfg); err == nil {
+
+			mux := http.NewServeMux()
+			humaAPI := humago.New(mux, NewHumaConfig())
+			if _, err := NewServer(mux, humaAPI, cfg); err == nil {
 				t.Error("expected error, got nil")
 			}
 		})
 	}
 
-	if _, err := NewServer(valid); err != nil {
+	mux := http.NewServeMux()
+	humaAPI := humago.New(mux, NewHumaConfig())
+	if _, err := NewServer(mux, humaAPI, valid); err != nil {
 		t.Errorf("NewServer(valid) = %v, want nil", err)
-	}
-}
-
-func TestMountedAuthHandlersServe(t *testing.T) {
-	authRoutes := http.NewServeMux()
-	authRoutes.HandleFunc("POST /auth/magic-link", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusAccepted)
-	})
-
-	server := newTestServerWith(t, ServerConfig{
-		AuthService:       &stubAuthService{},
-		Users:             newStubUserStore(),
-		AuthHandlers:      authRoutes,
-		PagesRenderer:     stubRenderer{},
-		SessionCookieName: secureSessionCookieName,
-	})
-
-	recorder := postForm(t, server, "/auth/magic-link", url.Values{"email": {testEmail}})
-	if recorder.Code != http.StatusAccepted {
-		t.Errorf("status = %d, want %d", recorder.Code, http.StatusAccepted)
 	}
 }
 
@@ -301,7 +294,6 @@ func TestMagicLinkSignInFlow(t *testing.T) {
 	server := newTestServerWith(t, ServerConfig{
 		AuthService:       authService,
 		Users:             users,
-		AuthHandlers:      authService.AuthHandlers(),
 		PagesRenderer:     stubRenderer{},
 		CookieSecure:      true,
 		SessionCookieName: secureSessionCookieName,
@@ -678,5 +670,19 @@ func TestAuthErrorStatus(t *testing.T) {
 				t.Errorf("status = %d, want %d", status, tc.status)
 			}
 		})
+	}
+}
+
+func TestOpenAPIDocumentsOperations(t *testing.T) {
+	server := newTestServer(t, &stubAuthService{}, nil)
+
+	paths := server.OpenAPI().Paths
+	for _, path := range []string{
+		"/", "/healthz", "/sign-in", "/logout",
+		"/account", "/account/setActive", "/account/logout-all", "/account/delete",
+	} {
+		if paths[path] == nil {
+			t.Errorf("OpenAPI document is missing path %q", path)
+		}
 	}
 }

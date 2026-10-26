@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/hmcalister/cirrus/internal/database"
 	"github.com/hmcalister/cirrus/internal/template"
 	"github.com/hmcalister/stratus/pkg/auth"
@@ -17,6 +18,7 @@ type authService interface {
 	ValidateSession(ctx context.Context, rawToken string) (auth.Identity, error)
 	Logout(ctx context.Context, rawToken string) error
 	LogoutAll(ctx context.Context, userEmail string) error
+	RegisterHumaHandlers(api huma.API)
 }
 
 var _ authService = (*auth.AuthService)(nil)
@@ -48,7 +50,6 @@ func SessionCookieName(secure bool) string {
 type ServerConfig struct {
 	AuthService       authService
 	Users             userStore
-	AuthHandlers      http.Handler
 	PagesRenderer     template.PageRenderer
 	CookieSecure      bool
 	SessionCookieName string
@@ -57,11 +58,20 @@ type ServerConfig struct {
 type Server struct {
 	ServerConfig
 
+	api huma.API
+	mux *http.ServeMux
+
 	// Enables deterministic request durations in tests. Never use time.Now directly.
 	now func() time.Time
 }
 
-func NewServer(cfg ServerConfig) (*Server, error) {
+func NewServer(mux *http.ServeMux, humaAPI huma.API, cfg ServerConfig) (*Server, error) {
+	if mux == nil {
+		return nil, errors.New("mux must be non-nil")
+	}
+	if humaAPI == nil {
+		return nil, errors.New("humaAPI must be non-nil")
+	}
 	if cfg.AuthService == nil {
 		return nil, errors.New("authService must be non-nil")
 	}
@@ -74,81 +84,49 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	if cfg.SessionCookieName == "" {
 		return nil, errors.New("sessionCookieName must be non-empty")
 	}
-	if cfg.AuthHandlers == nil {
-		cfg.AuthHandlers = http.NotFoundHandler()
+
+	server := &Server{
+		ServerConfig: cfg,
+		mux:          mux,
+		api:          humaAPI,
+		now:          time.Now,
 	}
-
-	return &Server{ServerConfig: cfg, now: time.Now}, nil
-}
-
-func (s *Server) Routes() http.Handler {
-	mux := http.NewServeMux()
-
-	// Stratus serves the magic-link routes:
-	//
-	//	POST /auth/magic-link
-	//	GET  /auth/magic-link/consume
-	//	POST /auth/logout
-	//	POST /auth/logout-all
-	mux.Handle("/auth/", s.AuthHandlers)
-
-	mux.Handle("GET /{$}", s.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/account", http.StatusSeeOther)
-	})))
-
-	mux.HandleFunc("GET /healthz", s.handleHealth)
-
-	mux.HandleFunc("GET /sign-in", s.handleSignInPage)
-	mux.HandleFunc("POST /logout", s.handleLogout)
+	server.registerOperations()
 
 	mux.Handle("GET /static/", staticHandler())
 
-	accountRoutes := http.NewServeMux()
-	accountRoutes.HandleFunc("GET /account", s.handleAccountPage)
-	accountRoutes.HandleFunc("POST /account/setActive", s.handleSetActive)
-	accountRoutes.HandleFunc("POST /account/logout-all", s.handleLogoutAll)
-	accountRoutes.HandleFunc("POST /account/delete", s.handleDelete)
-	mux.Handle("/account", s.RequireAuth(accountRoutes))
-	mux.Handle("/account/", s.RequireAuth(accountRoutes))
-
-	return s.logRequests(mux)
+	return server, nil
 }
 
-// Renders a full page with the given template and data.
-func (s *Server) renderPage(w http.ResponseWriter, templateName string, data any) {
-	body, err := s.PagesRenderer.RenderPage(templateName, data)
-	if err != nil {
-		slog.Error("error while rendering page", "template", templateName, "data", data, "err", err)
-		writePage(w, http.StatusInternalServerError, genericErrorMessage)
-		return
+// Returns the Huma configuration used by the server, including the form codec.
+func NewHumaConfig() huma.Config {
+	config := huma.DefaultConfig("Cirrus API", "2.0.0")
+
+	// Huma's default formats map is shared; clone it before adding the form codec.
+	formats := make(map[string]huma.Format, len(huma.DefaultFormats)+1)
+	for name, format := range huma.DefaultFormats {
+		formats[name] = format
 	}
+	formats[formMediaType] = newFormFormat()
+	config.Formats = formats
 
-	writePage(w, http.StatusOK, body)
+	return config
 }
 
-// Renders the fragment named by templateName with the given status.
-//
-// Reports whether the fragment rendered. A false return means the renderer
-// failed and a generic 500 body was already written.
-func (s *Server) renderFragment(w http.ResponseWriter, status int, templateName string, data any) bool {
-	body, err := s.PagesRenderer.RenderPage(templateName, data)
-	if err != nil {
-		writePage(w, http.StatusInternalServerError, genericErrorMessage)
-		return false
-	}
-
-	writePage(w, status, body)
-	return true
+func (s *Server) Routes() http.Handler {
+	return s.logRequests(s.mux)
 }
 
-// Clears the session cookie.
-//
-// Sets an empty value with an immediate expiry so the browser drops it.
-func (s *Server) clearSessionCookie(w http.ResponseWriter) {
-	// Expires the session cookie immediately, used to log out.
+// Returns the OpenAPI document built by Huma.
+func (s *Server) OpenAPI() *huma.OpenAPI {
+	return s.api.OpenAPI()
+}
+
+// Returns a cookie that removes the session cookie.
+func (s *Server) clearSessionCookie() *http.Cookie {
 	const sessionCookieMaxAge = -1
 
-	http.SetCookie(w, &http.Cookie{
+	return &http.Cookie{
 		Name:     s.SessionCookieName,
 		Value:    "",
 		Path:     "/",
@@ -156,12 +134,42 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 		HttpOnly: true,
 		Secure:   s.CookieSecure,
 		SameSite: http.SameSiteLaxMode,
-	})
+	}
+}
+
+// Renders a full page. A render failure becomes the generic HTML error page.
+func (s *Server) renderHTML(templateName string, data any) htmlOutput {
+	body, err := s.PagesRenderer.RenderPage(templateName, data)
+	if err != nil {
+		slog.Error("error while rendering page", "template", templateName, "data", data, "err", err)
+		return htmlOutput{
+			Status:      http.StatusInternalServerError,
+			ContentType: htmlContentType,
+			Body:        []byte(genericErrorMessage),
+		}
+	}
+
+	return htmlOutput{Status: http.StatusOK, ContentType: htmlContentType, Body: []byte(body)}
+}
+
+// Renders a fragment with the given status.
+func (s *Server) renderFragment(status int, templateName string, data any) htmlOutput {
+	body, err := s.PagesRenderer.RenderPage(templateName, data)
+	if err != nil {
+		slog.Error("error while rendering fragment", "template", templateName, "data", data, "err", err)
+		return htmlOutput{
+			Status:      http.StatusInternalServerError,
+			ContentType: htmlContentType,
+			Body:        []byte(genericErrorMessage),
+		}
+	}
+
+	return htmlOutput{Status: status, ContentType: htmlContentType, Body: []byte(body)}
 }
 
 // Renders err as the named error fragment with its mapped status.
-func (s *Server) renderAuthError(w http.ResponseWriter, templateName string, err error) {
+func (s *Server) renderAuthError(templateName string, err error) htmlOutput {
 	status, message := authErrorStatus(err)
 	slog.Warn("authentication error encountered", "err", err, "message", message)
-	s.renderFragment(w, status, templateName, errorFragment(message))
+	return s.renderFragment(status, templateName, errorFragment(message))
 }
