@@ -3,6 +3,7 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"slices"
 
 	"github.com/danielgtaylor/huma/v2"
 )
@@ -25,6 +26,26 @@ func (s *Server) requireUser(ctx huma.Context, next func(huma.Context)) {
 	}
 
 	next(huma.WithValue(ctx, userKey, user))
+}
+
+// Returns a Huma middleware that rejects the request unless the authenticated user holds the given role.
+//
+// It must run after requireUser, which attaches the application profile to the request context. A missing profile is an internal error rather than a permission failure.
+func (s *Server) makeRequiredRoleMiddleware(role string) func(huma.Context, func(huma.Context)) {
+	return func(ctx huma.Context, next func(huma.Context)) {
+		user, ok := userFromContext(ctx.Context())
+		if !ok {
+			_ = huma.WriteErr(s.api, ctx, http.StatusInternalServerError, "account profile unavailable")
+			return
+		}
+
+		if !slices.Contains(user.Roles, role) {
+			_ = huma.WriteErr(s.api, ctx, http.StatusForbidden, "insufficient permissions")
+			return
+		}
+
+		next(ctx)
+	}
 }
 
 // Returns the raw session token from a Cookie header, or "" when the header is absent, malformed, or carries no session cookie.
