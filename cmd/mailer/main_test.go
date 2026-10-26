@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,12 +41,20 @@ func TestNextSendTime(t *testing.T) {
 }
 
 type fakeUsers struct {
-	emails []string
-	err    error
+	emails      []string
+	adminEmails []string
+	err         error
+	adminErr    error
+	adminCalls  int
 }
 
-func (f fakeUsers) ListActiveEmails(context.Context) ([]string, error) {
+func (f *fakeUsers) ListActiveEmails(context.Context) ([]string, error) {
 	return f.emails, f.err
+}
+
+func (f *fakeUsers) ListAdminEmails(context.Context) ([]string, error) {
+	f.adminCalls++
+	return f.adminEmails, f.adminErr
 }
 
 // An in-memory FileGetter. Files are kept in a map so tests need not care
@@ -125,7 +135,7 @@ func TestSendDailyEmailsSendsOneCloudToBatches(t *testing.T) {
 	}
 	files := &fakeFileGetter{files: maps.Clone(images)}
 	sender := &fakeSender{}
-	daily := newTestEmailer(fakeUsers{emails: emails}, files, sender, 2)
+	daily := newTestEmailer(&fakeUsers{emails: emails}, files, sender, 2)
 
 	if err := daily.send(context.Background()); err != nil {
 		t.Fatalf("send() err = %v", err)
@@ -176,7 +186,7 @@ func TestSendDailyEmailsSendsOneCloudToBatches(t *testing.T) {
 func TestSendDailyEmailsSkipsRunWithoutActiveUsers(t *testing.T) {
 	files := &fakeFileGetter{files: map[string][]byte{"clouds/today.jpg": []byte("cloud")}}
 	sender := &fakeSender{}
-	daily := newTestEmailer(fakeUsers{}, files, sender, 10)
+	daily := newTestEmailer(&fakeUsers{}, files, sender, 10)
 
 	if err := daily.send(context.Background()); err != nil {
 		t.Fatalf("send() err = %v", err)
@@ -196,7 +206,7 @@ func TestSendDailyEmailsSkipsRunWithoutActiveUsers(t *testing.T) {
 func TestSendDailyEmailsFailsWithoutImages(t *testing.T) {
 	files := &fakeFileGetter{files: map[string][]byte{}}
 	sender := &fakeSender{}
-	daily := newTestEmailer(fakeUsers{emails: []string{"user@example.com"}}, files, sender, 10)
+	daily := newTestEmailer(&fakeUsers{emails: []string{"user@example.com"}}, files, sender, 10)
 
 	err := daily.send(context.Background())
 	if err == nil {
@@ -217,7 +227,7 @@ func TestSendDailyEmailsKeepsImageWhenGetFails(t *testing.T) {
 		getErr: errors.New("bucket is unavailable"),
 	}
 	sender := &fakeSender{}
-	daily := newTestEmailer(fakeUsers{emails: []string{"user@example.com"}}, files, sender, 10)
+	daily := newTestEmailer(&fakeUsers{emails: []string{"user@example.com"}}, files, sender, 10)
 
 	err := daily.send(context.Background())
 	if err == nil {
@@ -239,7 +249,7 @@ func TestSendDailyEmailsKeepsImageWhenEveryBatchFails(t *testing.T) {
 		1: errors.New("smtp is down"),
 	}}
 	emails := []string{"one@example.com", "two@example.com", "three@example.com"}
-	daily := newTestEmailer(fakeUsers{emails: emails}, files, sender, 2)
+	daily := newTestEmailer(&fakeUsers{emails: emails}, files, sender, 2)
 
 	if err := daily.send(context.Background()); err != nil {
 		t.Fatalf("send() err = %v", err)
@@ -253,11 +263,94 @@ func TestSendDailyEmailsKeepsImageWhenEveryBatchFails(t *testing.T) {
 	}
 }
 
+func TestSendDailyEmailsAlertsAdminsWhenImagesRunLow(t *testing.T) {
+	tests := []struct {
+		name       string
+		imageCount int
+		wantAlert  bool
+	}{
+		{"seven remain", 8, true},
+		{"eight remain", 9, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			images := make(map[string][]byte, tc.imageCount)
+			for i := range tc.imageCount {
+				images[fmt.Sprintf("clouds/%d.jpg", i)] = []byte("cloud")
+			}
+
+			files := &fakeFileGetter{files: images}
+			sender := &fakeSender{}
+			users := &fakeUsers{
+				emails:      []string{"user@example.com"},
+				adminEmails: []string{"admin@example.com"},
+			}
+			daily := newTestEmailer(users, files, sender, 10)
+
+			if err := daily.send(context.Background()); err != nil {
+				t.Fatalf("send() err = %v", err)
+			}
+
+			wantMessages := 1
+			wantAdminCalls := 0
+			if tc.wantAlert {
+				wantMessages = 2
+				wantAdminCalls = 1
+			}
+			if len(sender.sent) != wantMessages {
+				t.Fatalf("sent %d messages, want %d", len(sender.sent), wantMessages)
+			}
+			if users.adminCalls != wantAdminCalls {
+				t.Errorf("listed admins %d times, want %d", users.adminCalls, wantAdminCalls)
+			}
+			if !tc.wantAlert {
+				return
+			}
+
+			alert := sender.sent[1]
+			if want := []string{"admin@example.com"}; !slices.Equal(alert.BCCRecipients, want) {
+				t.Errorf("alert BCC recipients = %v, want %v", alert.BCCRecipients, want)
+			}
+			if len(alert.Attachments) != 0 {
+				t.Errorf("alert has %d attachments, want none", len(alert.Attachments))
+			}
+			if !strings.Contains(alert.Body, "7") {
+				t.Errorf("alert body = %q, want the remaining count", alert.Body)
+			}
+		})
+	}
+}
+
+func TestSendDailyEmailsIgnoresFailedAdminAlert(t *testing.T) {
+	images := map[string][]byte{
+		"clouds/one.jpg": []byte("one"),
+		"clouds/two.jpg": []byte("two"),
+	}
+	files := &fakeFileGetter{files: images}
+	sender := &fakeSender{errsForCall: map[int]error{1: errors.New("smtp is down")}}
+	users := &fakeUsers{
+		emails:      []string{"user@example.com"},
+		adminEmails: []string{"admin@example.com"},
+	}
+	daily := newTestEmailer(users, files, sender, 10)
+
+	if err := daily.send(context.Background()); err != nil {
+		t.Fatalf("send() err = %v, want nil", err)
+	}
+
+	if len(files.deleted) != 1 {
+		t.Errorf("deleted %d images, want 1", len(files.deleted))
+	}
+	if len(sender.sent) != 1 {
+		t.Errorf("sent %d messages, want 1", len(sender.sent))
+	}
+}
+
 func TestSendDailyEmailsDeletesImageWhenOneBatchSucceeds(t *testing.T) {
 	files := &fakeFileGetter{files: map[string][]byte{"clouds/today.jpg": []byte("cloud")}}
 	sender := &fakeSender{errsForCall: map[int]error{0: errors.New("smtp is down")}}
 	emails := []string{"one@example.com", "two@example.com", "three@example.com", "four@example.com"}
-	daily := newTestEmailer(fakeUsers{emails: emails}, files, sender, 2)
+	daily := newTestEmailer(&fakeUsers{emails: emails}, files, sender, 2)
 
 	if err := daily.send(context.Background()); err != nil {
 		t.Fatalf("send() err = %v", err)

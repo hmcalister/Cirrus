@@ -6,11 +6,13 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/hmcalister/cirrus/internal/filestore"
 )
 
 type ServerConfig struct {
 	AuthService       authService
 	Users             userStore
+	Files             filestore.FileGetter
 	SessionCookieName string
 }
 
@@ -36,6 +38,9 @@ func NewServer(mux *http.ServeMux, humaAPI huma.API, cfg ServerConfig) (*Server,
 	}
 	if cfg.Users == nil {
 		return nil, errors.New("users must be non-nil")
+	}
+	if cfg.Files == nil {
+		return nil, errors.New("files must be non-nil")
 	}
 	if cfg.SessionCookieName == "" {
 		return nil, errors.New("sessionCookieName must be non-empty")
