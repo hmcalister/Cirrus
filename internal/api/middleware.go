@@ -7,32 +7,37 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 )
 
-// Huma middleware that validates the Stratus session, creates the application profile for the authenticated identity,
-// and attaches that profile to the request context.
-//
-// Unauthenticated browser requests are redirected to the sign-in page.
+// Huma middleware that validates the Stratus session, creates the application profile for the authenticated identity, and attaches that profile to the request context.
 func (s *Server) requireUser(ctx huma.Context, next func(huma.Context)) {
 	rawToken := sessionTokenFromCookieHeader(ctx.Header("Cookie"), s.SessionCookieName)
 
 	identity, err := s.AuthService.ValidateSession(ctx.Context(), rawToken)
 	if err != nil {
-		ctx.SetHeader("Location", "/sign-in")
-		if rawToken != "" {
-			ctx.AppendHeader("Set-Cookie", s.clearSessionCookie().String())
-		}
-		ctx.SetStatus(http.StatusSeeOther)
-		slog.Warn("attempt to reach authentication route without a valid session", "err", err)
+		_ = huma.WriteErr(s.api, ctx, http.StatusUnauthorized, "a valid session is required")
 		return
 	}
 
 	user, err := s.Users.GetOrCreateUser(ctx.Context(), identity.Email)
 	if err != nil {
 		slog.Error("error ensuring user profile", "email_hash", hashEmail(identity.Email), "err", err)
-		ctx.SetHeader("Content-Type", htmlContentType)
-		ctx.SetStatus(http.StatusInternalServerError)
-		_, _ = ctx.BodyWriter().Write([]byte(genericErrorMessage))
+		_ = huma.WriteErr(s.api, ctx, http.StatusInternalServerError, "unable to load account")
 		return
 	}
 
 	next(huma.WithValue(ctx, userKey, user))
+}
+
+// Returns the raw session token from a Cookie header, or "" when the header is absent, malformed, or carries no session cookie.
+func sessionTokenFromCookieHeader(cookieHeader, cookieName string) string {
+	if cookieHeader == "" {
+		return ""
+	}
+
+	cookies, _ := http.ParseCookie(cookieHeader)
+	for _, cookie := range cookies {
+		if cookie.Name == cookieName {
+			return cookie.Value
+		}
+	}
+	return ""
 }
