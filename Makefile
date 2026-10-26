@@ -1,38 +1,44 @@
-.PHONY: build run test sqlcGenerate appBuild podmanBuild podmanClean podmanRun podmanCleanAll testBuild testRun
+.PHONY: init generate sqlc openapi web-install web-dev web-build build test lint fmt up down
 
-ifndef ENV_FILE
-$(error ENV_FILE is not set. Please set it to the path of your environment file, e.g., ENV_FILE=secrets/.env)
-endif
+SQLC ?= sqlc
+NPM ?= npm
+CONTAINER_ENGINE ?= podman
 
-include ${ENV_FILE}
-export
+generate: sqlc openapi
 
-build: sqlcGenerate appBuild podmanBuild
+sqlc:
+	$(SQLC) generate -f sqlc/sqlc.yaml
 
-run: build podmanRun
+openapi: web-install
+	go run ./cmd/generate-openapi -o openapi.yaml
+	$(NPM) --prefix web run openapi
 
-test: testRun
+init: web-install
 
-sqlcGenerate:
-	sqlc generate -f sqlc/sqlc.yaml
+web-install:
+	$(NPM) install --prefix web
 
-appBuild:
-	go build -o build/main ./cmd/main.go
+web-dev: openapi
+	$(NPM) --prefix web run dev
 
-podmanBuild:
-	podman compose build
+web-build: openapi
+	$(NPM) --prefix web run build
 
-podmanRun: podmanBuild
-	podman compose up
+build: generate web-build
+	go build ./...
 
-podmanClean:
-	podman compose down
+test: generate
+	go test -race ./...
 
-podmanCleanAll:
-	podman compose down -v
+lint: generate
+	go vet ./...
+	golangci-lint run ./...
 
-testBuild:
-	podman compose --profile test build test-container
+fmt:
+	gofmt -w .
 
-testRun: testBuild
-	podman compose --profile test up test-container --abort-on-container-exit
+up:
+	$(CONTAINER_ENGINE) compose up --build
+
+down:
+	$(CONTAINER_ENGINE) compose down

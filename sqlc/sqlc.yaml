@@ -1,10 +1,13 @@
 version: "2"
 sql:
   - engine: "postgresql"
-    queries: "query.sql"
+    queries: "queries.sql"
     schema: "schema.sql"
     gen:
       go:
         package: "database"
         out: "../internal/database"
         sql_package: "pgx/v5"
+        # Emits a Querier interface covering every generated query, so that
+        # handlers can depend on the interface and be tested against a fake.
+        emit_interface: true

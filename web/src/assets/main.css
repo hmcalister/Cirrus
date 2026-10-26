@@ -1,0 +1,33 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.shell-header {
+  width: 100%;
+  max-width: 32rem;
+  margin-bottom: 1rem;
+  color: var(--ui-text-muted, #5b6472);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.shell-main {
+  width: 100%;
+  max-width: 32rem;
+}
