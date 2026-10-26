@@ -1,17 +1,30 @@
-.PHONY: generate sqlc openapi build test lint fmt up down
+.PHONY: init generate sqlc openapi web-install web-dev web-build build test lint fmt up down
 
 SQLC ?= sqlc
+NPM ?= npm
+CONTAINER_ENGINE ?= podman
 
-# Regenerate everything derived from source.
 generate: sqlc openapi
 
 sqlc:
 	$(SQLC) generate -f sqlc/sqlc.yaml
 
-openapi:
+openapi: web-install
 	go run ./cmd/generate-openapi -o openapi.yaml
+	$(NPM) --prefix web run openapi
 
-build: generate
+init: web-install
+
+web-install:
+	$(NPM) install --prefix web
+
+web-dev: openapi
+	$(NPM) --prefix web run dev
+
+web-build: openapi
+	$(NPM) --prefix web run build
+
+build: generate web-build
 	go build ./...
 
 test: generate
@@ -24,8 +37,8 @@ lint: generate
 fmt:
 	gofmt -w .
 
-up: generate
-	docker compose up --build
+up:
+	$(CONTAINER_ENGINE) compose up --build
 
 down:
-	docker compose down
+	$(CONTAINER_ENGINE) compose down

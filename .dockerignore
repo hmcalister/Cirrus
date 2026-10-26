@@ -1,8 +1,11 @@
 *
-
 !go.mod
 !go.sum
 !cmd/
 !internal/
+!web/
 
+web/node_modules
+web/dist
+web/src/api/schema.d.ts
 **/*_test.go
