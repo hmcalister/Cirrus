@@ -1,7 +1,7 @@
 .PHONY: init generate sqlc openapi web-install web-dev web-build build test lint fmt up down
 
 SQLC ?= sqlc
-BUN ?= bun
+NPM ?= npm
 CONTAINER_ENGINE ?= podman
 
 generate: sqlc openapi
@@ -11,18 +11,18 @@ sqlc:
 
 openapi: web-install
 	go run ./cmd/generate-openapi -o openapi.yaml
-	$(BUN) run --cwd web openapi
+	$(NPM) --prefix web run openapi
 
 init: web-install
 
 web-install:
-	$(BUN) install --cwd web
+	$(NPM) install --prefix web
 
 web-dev: openapi
-	$(BUN) run --cwd web dev
+	$(NPM) --prefix web run dev
 
 web-build: openapi
-	$(BUN) run --cwd web build
+	$(NPM) --prefix web run build
 
 build: generate web-build
 	go build ./...
