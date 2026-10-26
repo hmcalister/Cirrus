@@ -47,21 +47,28 @@ func setValidEnv(t *testing.T) {
 		envAuthLinkExpiry:    "15m",
 		envAuthSessionExpiry: "720h",
 		envAuthBaseURL:       "https://cloud.example.com",
+
+		envDailyEmailTime:         "08:00",
+		envDailyEmailBCCBatchSize: "50",
+
+		envS3Bucket:   "cirrus-clouds",
+		envS3Region:   "nyc3",
+		envS3Endpoint: "https://nyc3.digitaloceanspaces.com",
 	} {
 		t.Setenv(key, value)
 	}
 }
 
-func TestLoadValid(t *testing.T) {
+func TestLoadServer(t *testing.T) {
 	setValidEnv(t)
 
-	cfg, err := Load()
+	cfg, err := LoadServer()
 	if err != nil {
-		t.Fatalf("Load() err = %v, want nil", err)
+		t.Fatalf("LoadServer() err = %v, want nil", err)
 	}
 
-	if cfg.Server.Addr != ":8080" {
-		t.Errorf("Server.Addr = %q", cfg.Server.Addr)
+	if cfg.HTTP.Addr != ":8080" {
+		t.Errorf("HTTP.Addr = %q", cfg.HTTP.Addr)
 	}
 	if cfg.Database.MaxConns != 10 || cfg.Database.MinConns != 1 {
 		t.Errorf("Database conns = (%d, %d)", cfg.Database.MaxConns, cfg.Database.MinConns)
@@ -89,16 +96,16 @@ func TestLoadValid(t *testing.T) {
 	}
 }
 
-func TestLoadAccumulatesErrors(t *testing.T) {
+func TestLoadServerAccumulatesErrors(t *testing.T) {
 	setValidEnv(t)
 
 	t.Setenv(envHTTPAddr, "")
 	t.Setenv(envPostgresPassword, "")
 	t.Setenv(envAuthSessionExpiry, "not-a-duration")
 
-	_, err := Load()
+	_, err := LoadServer()
 	if err == nil {
-		t.Fatal("Load() err = nil, want error")
+		t.Fatal("LoadServer() err = nil, want error")
 	}
 
 	for _, key := range []string{envHTTPAddr, envPostgresPassword, envAuthSessionExpiry} {
@@ -108,36 +115,138 @@ func TestLoadAccumulatesErrors(t *testing.T) {
 	}
 }
 
-func TestLoadMissingVariable(t *testing.T) {
+func TestLoadServerMissingVariable(t *testing.T) {
 	setValidEnv(t)
 	t.Setenv(envEmailSMTPHost, "")
 
-	_, err := Load()
+	_, err := LoadServer()
 	if err == nil || !strings.Contains(err.Error(), envEmailSMTPHost) {
-		t.Errorf("Load() err = %v, want error naming %s", err, envEmailSMTPHost)
+		t.Errorf("LoadServer() err = %v, want error naming %s", err, envEmailSMTPHost)
 	}
 }
 
-func TestLoadMalformedVariable(t *testing.T) {
+func TestLoadServerMalformedVariable(t *testing.T) {
 	setValidEnv(t)
 	t.Setenv(envDBMaxConns, "many")
 
-	_, err := Load()
+	_, err := LoadServer()
 	if err == nil || !strings.Contains(err.Error(), envDBMaxConns) {
-		t.Errorf("Load() err = %v, want error naming %s", err, envDBMaxConns)
+		t.Errorf("LoadServer() err = %v, want error naming %s", err, envDBMaxConns)
 	}
 }
 
-func TestLoadOptionalVariables(t *testing.T) {
+// The server does not send the daily email, so it must not need its settings.
+func TestLoadServerIgnoresMailerVariables(t *testing.T) {
 	setValidEnv(t)
-	// Debug is optional; unset it.
+	t.Setenv(envDailyEmailTime, "")
+	t.Setenv(envS3Bucket, "")
+	t.Setenv(envS3Region, "")
+
+	if _, err := LoadServer(); err != nil {
+		t.Fatalf("LoadServer() err = %v, want nil", err)
+	}
+}
+
+func TestLoadServerOptionalDebug(t *testing.T) {
+	setValidEnv(t)
 	t.Setenv(envDebug, "")
 
-	cfg, err := Load()
+	cfg, err := LoadServer()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Debug {
 		t.Error("Debug = true, want false when unset")
+	}
+}
+
+func TestLoadMailer(t *testing.T) {
+	setValidEnv(t)
+
+	cfg, err := LoadMailer()
+	if err != nil {
+		t.Fatalf("LoadMailer() err = %v, want nil", err)
+	}
+
+	if want := "postgres://cirrus:secret@database:5432/cirrus"; cfg.Database.DatabaseURL != want {
+		t.Errorf("Database.DatabaseURL = %q, want %q", cfg.Database.DatabaseURL, want)
+	}
+	if cfg.Email.Timeout != 30*time.Second {
+		t.Errorf("Email.Timeout = %v", cfg.Email.Timeout)
+	}
+	if cfg.DailyEmail.Hour != 8 || cfg.DailyEmail.Minute != 0 {
+		t.Errorf("DailyEmail = %+v", cfg.DailyEmail)
+	}
+	if cfg.DailyEmail.BCCBatchSize != 50 {
+		t.Errorf("DailyEmail.BCCBatchSize = %d, want 50", cfg.DailyEmail.BCCBatchSize)
+	}
+	if cfg.S3.Bucket != "cirrus-clouds" || cfg.S3.Region != "nyc3" {
+		t.Errorf("S3 = %+v", cfg.S3)
+	}
+	if cfg.S3.Endpoint != "https://nyc3.digitaloceanspaces.com" {
+		t.Errorf("S3.Endpoint = %q", cfg.S3.Endpoint)
+	}
+	if !cfg.Debug {
+		t.Error("Debug = false, want true")
+	}
+}
+
+func TestLoadMailerMalformedDailyEmailTime(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv(envDailyEmailTime, "half past eight")
+
+	_, err := LoadMailer()
+	if err == nil || !strings.Contains(err.Error(), envDailyEmailTime) {
+		t.Errorf("LoadMailer() err = %v, want error naming %s", err, envDailyEmailTime)
+	}
+}
+
+func TestLoadMailerInvalidBCCBatchSize(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv(envDailyEmailBCCBatchSize, "0")
+
+	_, err := LoadMailer()
+	if err == nil || !strings.Contains(err.Error(), envDailyEmailBCCBatchSize) {
+		t.Errorf("LoadMailer() err = %v, want error naming %s", err, envDailyEmailBCCBatchSize)
+	}
+}
+
+func TestLoadMailerMissingS3Bucket(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv(envS3Bucket, "")
+
+	_, err := LoadMailer()
+	if err == nil || !strings.Contains(err.Error(), envS3Bucket) {
+		t.Errorf("LoadMailer() err = %v, want error naming %s", err, envS3Bucket)
+	}
+}
+
+// The mailer serves no HTTP and handles no sign in, so it must not need the
+// server's settings.
+func TestLoadMailerIgnoresServerVariables(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv(envHTTPAddr, "")
+	t.Setenv(envAuthBaseURL, "")
+	t.Setenv(envEmailRateLimitAddressBurst, "")
+
+	if _, err := LoadMailer(); err != nil {
+		t.Fatalf("LoadMailer() err = %v, want nil", err)
+	}
+}
+
+func TestLoadMailerOptionalDebugAndEndpoint(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv(envDebug, "")
+	t.Setenv(envS3Endpoint, "")
+
+	cfg, err := LoadMailer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Debug {
+		t.Error("Debug = true, want false when unset")
+	}
+	if cfg.S3.Endpoint != "" {
+		t.Errorf("S3.Endpoint = %q, want empty", cfg.S3.Endpoint)
 	}
 }

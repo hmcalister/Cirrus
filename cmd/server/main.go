@@ -38,7 +38,7 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.Load()
+	cfg, err := config.LoadServer()
 	if err != nil {
 		return err
 	}
@@ -107,8 +107,6 @@ func run() error {
 		return err
 	}
 
-	// The standard-library mux carries every route: Huma operations, the Stratus
-	// auth operations, and the embedded static assets.
 	mux := http.NewServeMux()
 	humaAPI := humago.New(mux, api.NewHumaConfig())
 	authService.RegisterHumaHandlers(humaAPI)
@@ -123,17 +121,17 @@ func run() error {
 	}
 
 	server := &http.Server{
-		Addr:              cfg.Server.Addr,
+		Addr:              cfg.HTTP.Addr,
 		Handler:           apiServer.Routes(),
-		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
-		ReadTimeout:       cfg.Server.ReadTimeout,
-		WriteTimeout:      cfg.Server.WriteTimeout,
-		IdleTimeout:       cfg.Server.IdleTimeout,
+		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
+		ReadTimeout:       cfg.HTTP.ReadTimeout,
+		WriteTimeout:      cfg.HTTP.WriteTimeout,
+		IdleTimeout:       cfg.HTTP.IdleTimeout,
 	}
 
 	serveErr := make(chan error, 1)
 	go func() {
-		slog.Info("ready to serve", "addr", cfg.Server.Addr)
+		slog.Info("ready to serve", "addr", cfg.HTTP.Addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serveErr <- err
 		}
@@ -146,7 +144,7 @@ func run() error {
 		slog.Info("shutdown signal received")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.HTTP.ShutdownTimeout)
 	defer cancel()
 	return server.Shutdown(shutdownCtx)
 }
