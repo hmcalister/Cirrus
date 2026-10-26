@@ -3,7 +3,6 @@
 		<h1>Your account</h1>
 		<p class="sub email">{{.Email}}</p>
 
-		{{if not .Verified}}{{template "account_unverified" .}}{{end}}
 		{{template "account_active" .}}
 		{{template "status"}}
 
@@ -11,9 +10,8 @@
 			<form hx-post="/logout" hx-disabled="find button" hx-target="#status">
 				<button type="submit" class="secondary">Sign out</button>
 			</form>
-			<form hx-post="/password/reset" hx-disabled="find button" hx-target="#status">
-                <input type="hidden" name="email" value="{{.Email}}">
-				<button type="submit" class="danger">Reset password</button>
+			<form hx-post="/account/logout-all" hx-disabled="find button" hx-target="#status">
+				<button type="submit" class="secondary">Sign out everywhere</button>
 			</form>
 			<form hx-post="/account/delete" hx-confirm="Delete your account permanently? This cannot be undone." hx-disabled="find button" hx-target="#status">
 				<button type="submit" class="danger">Delete account</button>

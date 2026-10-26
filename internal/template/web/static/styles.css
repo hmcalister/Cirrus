@@ -242,6 +242,25 @@ button.danger:hover {
     display: none;
 }
 
+/* Stratus answers a magic-link request with plain text, so style the container
+   that receives it rather than a .message fragment. */
+#sign-in-status:empty {
+    display: none;
+}
+
+#sign-in-status:not(:empty) {
+    display: flex;
+    margin-top: 1rem;
+    padding: 0.75rem;
+    border: 1px solid var(--success-border);
+    border-radius: var(--border-radius);
+    background: var(--success);
+    color: var(--success-soft);
+    font-size: var(--font-size-regular);
+    font-weight: var(--font-weight-regular);
+    animation: fade-in 100ms ease-out;
+}
+
 .message {
     display: flex;
     margin-top: 1rem;

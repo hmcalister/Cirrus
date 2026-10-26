@@ -1,20 +1,5 @@
 {{/* Shared account sections. */}}
 
-{{define "account_unverified"}}
-<section class="setting" id="account-verified" hx-swap-oob="true">
-	<div class="setting-row">
-		<div>
-			<h2>Account unverified</h2>
-			<p>Your account is unverified. Resend the verification email to start receiving daily emails.</p>
-		</div>
-	</div>
-	<form hx-post="/verify/resend" hx-target="#status" hx-disabled="find button">
-		<input type="hidden" name="email" value="{{.Email}}">
-		<button type="submit" class="secondary">Resend verification email</button>
-	</form>
-</section>
-{{end}}
-
 {{define "account_active"}}
 <section class="setting" id="account-active" hx-swap-oob="true">
 	<div class="setting-row">
