@@ -15,3 +15,9 @@ DELETE FROM user_accounts WHERE email = $1;
 -- Returns the address of every user who still receives daily emails.
 -- name: ListActiveEmails :many
 SELECT email FROM user_accounts WHERE active ORDER BY email;
+
+-- name: CountUsers :one
+SELECT COUNT(*) FROM user_accounts;
+
+-- name: CountActiveUsers :one
+SELECT COUNT(*) FROM user_accounts WHERE active;
