@@ -4,24 +4,15 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/hmcalister/cirrus/internal/database"
 	"github.com/hmcalister/cirrus/internal/template"
-)
-
-const (
-	passwordResetSentMessage  = "A reset link has been sent"
-	verificationResentMessage = "A verification link has been sent"
 )
 
 // Page data for rendering templates
 
-type signInPageData struct{}
-
-type registerPageData struct{}
-
 type accountPageData struct {
-	Email    string
-	Active   bool
-	Verified bool
+	Email  string
+	Active bool
 }
 
 // Data for the account_status fragment returned after a setActive POST. It
@@ -31,13 +22,6 @@ type accountStatusFragment struct {
 	Message string
 	Active  bool
 }
-type resetPageData struct {
-	Token string
-}
-
-type passwordResetRequestPageData struct{}
-
-type verifyResendPageData struct{}
 
 // Misc routes
 
@@ -48,150 +32,62 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 // Page routes
 
 func (s *Server) handleSignInPage(w http.ResponseWriter, _ *http.Request) {
-	s.renderPage(w, template.TemplatePageSignIn, signInPageData{})
-}
-
-func (s *Server) handleRegisterPage(w http.ResponseWriter, _ *http.Request) {
-	s.renderPage(w, template.TemplatePageRegister, registerPageData{})
-}
-
-func (s *Server) handleResetPage(w http.ResponseWriter, r *http.Request) {
-	token := formValue(r, "token")
-	if token == "" {
-		token = r.URL.Query().Get("token")
-	}
-
-	s.renderPage(w, template.TemplatePageReset, resetPageData{Token: token})
-}
-
-func (s *Server) handlePasswordResetRequestPage(w http.ResponseWriter, _ *http.Request) {
-	s.renderPage(w, template.TemplatePagePasswordResetRequest, passwordResetRequestPageData{})
-}
-
-func (s *Server) handleVerifyResendPage(w http.ResponseWriter, _ *http.Request) {
-	s.renderPage(w, template.TemplatePageVerifyResend, verifyResendPageData{})
+	s.renderPage(w, template.TemplatePageSignIn, nil)
 }
 
 func (s *Server) handleAccountPage(w http.ResponseWriter, r *http.Request) {
-	userEmail := emailFromContext(r.Context())
-
-	active, err := s.AuthService.AccountActive(r.Context(), userEmail)
-	if err != nil {
-		slog.Warn("error when checking account active", "request_context", r.Context(), "err", err)
+	user, ok := userFromContext(r.Context())
+	if !ok {
+		// RequireAuth guarantees a user in the context.
 		writePage(w, http.StatusInternalServerError, genericErrorMessage)
 		return
 	}
 
-	verified, err := s.AuthService.AccountVerified(r.Context(), userEmail)
-	if err != nil {
-		slog.Warn("error when checking account verified", "err", err)
-		writePage(w, http.StatusInternalServerError, genericErrorMessage)
-		return
-	}
-
-	s.renderPage(w, template.TemplatePageAccount, accountPageData{Email: userEmail, Active: active, Verified: verified})
+	s.renderPage(w, template.TemplatePageAccount, accountPageData{Email: user.Email, Active: user.Active})
 }
 
 // POST routes
 
-// Burns the token from the email link and redirects to the sign in page.
-func (s *Server) handleVerify(w http.ResponseWriter, r *http.Request) {
-	rawToken := r.URL.Query().Get("token")
+// Revokes the current session and clears the cookie.
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	rawToken := sessionToken(r, s.SessionCookieName)
 
-	_, err := s.AuthService.Verify(r.Context(), rawToken)
-	if err != nil {
-		slog.Warn("error when checking account verified", "request_context", r.Context(), "err", err)
-		status, message := authErrorStatus(err)
-		s.renderFragment(w, status, "sign_in_error", errorFragment(message))
+	if err := s.AuthService.Logout(r.Context(), rawToken); err != nil {
+		slog.Warn("error when signing out", "request_context", r.Context(), "err", err)
+		s.renderAuthError(w, "account_error", err)
 		return
 	}
 
-	http.Redirect(w, r, "/sign-in", http.StatusSeeOther)
-}
-
-func (s *Server) handleSignIn(w http.ResponseWriter, r *http.Request) {
-	userEmail := formValue(r, "email")
-	password := r.PostFormValue("password")
-
-	rawToken, err := s.AuthService.SignIn(r.Context(), userEmail, password)
-	if err != nil {
-		slog.Warn("sign in failed", "request_context", r.Context(), "email_hash", hashEmail(userEmail))
-		s.renderAuthError(w, "sign_in_error", err)
-		return
-	}
-
-	slog.Info("sign in succeeded", "request_context", r.Context(), "email_hash", hashEmail(userEmail))
-	s.setSessionCookie(w, rawToken)
-	writeHXRedirect(w, "/account")
-}
-
-func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
-	userEmail := formValue(r, "email")
-	password := r.PostFormValue("password")
-
-	if err := s.AuthService.Register(r.Context(), userEmail, password); err != nil {
-		slog.Warn("error when registering account", "request_context", r.Context(), "err", err)
-		s.renderAuthError(w, "register_error", err)
-		return
-	}
-
-	slog.Info("account registered", "request_id", requestIDFromContext(r.Context()), "email_hash", hashEmail(userEmail))
-	writeHXRedirect(w, "/sign-in")
-}
-
-func (s *Server) handleLogout(w http.ResponseWriter, _ *http.Request) {
 	s.clearSessionCookie(w)
 	writeHXRedirect(w, "/sign-in")
 }
 
-// Requests a reset email.
-//
-// The response never reveals whether the account exists, so it always renders the same status message with HTTP 200.
-func (s *Server) handlePasswordResetRequest(w http.ResponseWriter, r *http.Request) {
-	userEmail := formValue(r, "email")
-
-	if err := s.AuthService.RequestPasswordReset(r.Context(), userEmail); err != nil {
-		slog.Warn("error when requesting password reset", "request_context", r.Context(), "err", err)
-		s.renderAuthError(w, "password_reset_status", err)
+// Revokes every session belonging to the signed-in user.
+func (s *Server) handleLogoutAll(w http.ResponseWriter, r *http.Request) {
+	user, ok := userFromContext(r.Context())
+	if !ok {
+		writePage(w, http.StatusInternalServerError, genericErrorMessage)
 		return
 	}
 
-	slog.Info("password reset requested", "request_id", requestIDFromContext(r.Context()), "email_hash", hashEmail(userEmail))
-	s.renderFragment(w, http.StatusOK, "password_reset_status", statusFragment(passwordResetSentMessage))
-}
-
-func (s *Server) handleReset(w http.ResponseWriter, r *http.Request) {
-	rawToken := formValue(r, "token")
-	password := r.PostFormValue("password")
-
-	if err := s.AuthService.ConfirmPasswordReset(r.Context(), rawToken, password); err != nil {
-		slog.Warn("error when handling password reset", "request_context", r.Context(), "err", err)
-		s.renderAuthError(w, "reset_error", err)
+	if err := s.AuthService.LogoutAll(r.Context(), user.Email); err != nil {
+		slog.Warn("error when signing out all sessions", "request_context", r.Context(), "err", err)
+		s.renderAuthError(w, "account_error", err)
 		return
 	}
 
-	slog.Info("password reset confirmed", "request_id", requestIDFromContext(r.Context()))
+	s.clearSessionCookie(w)
+	slog.Info("all sessions signed out", "request_id", requestIDFromContext(r.Context()), "email_hash", hashEmail(user.Email))
 	writeHXRedirect(w, "/sign-in")
 }
 
-// Resends the verification email.
-//
-// The response never reveals whether the account exists, so it always renders the same status message with HTTP 200.
-func (s *Server) handleVerifyResend(w http.ResponseWriter, r *http.Request) {
-	userEmail := formValue(r, "email")
-
-	if err := s.AuthService.ResendVerification(r.Context(), userEmail); err != nil {
-		slog.Warn("error when resending verification email", "request_context", r.Context(), "err", err)
-		s.renderAuthError(w, "verify_resend_status", err)
+func (s *Server) handleSetActive(w http.ResponseWriter, r *http.Request) {
+	user, ok := userFromContext(r.Context())
+	if !ok {
+		writePage(w, http.StatusInternalServerError, genericErrorMessage)
 		return
 	}
 
-	slog.Info("verification resent", "request_id", requestIDFromContext(r.Context()), "email_hash", hashEmail(userEmail))
-	s.renderFragment(w, http.StatusOK, "verify_resend_status", statusFragment(verificationResentMessage))
-}
-
-func (s *Server) handleSetActive(w http.ResponseWriter, r *http.Request) {
-	userEmail := emailFromContext(r.Context())
 	activeStatusFormValue := r.PostFormValue("activeStatus")
 	if activeStatusFormValue != "true" && activeStatusFormValue != "false" {
 		slog.Warn("set active request sent with bad value", "request_context", r.Context(), "activeStatusFormValue", activeStatusFormValue)
@@ -200,7 +96,7 @@ func (s *Server) handleSetActive(w http.ResponseWriter, r *http.Request) {
 	}
 
 	activeStatus := activeStatusFormValue == "true"
-	if err := s.AuthService.SetAccountActive(r.Context(), userEmail, activeStatus); err != nil {
+	if err := s.Users.SetActive(r.Context(), database.SetActiveParams{Email: user.Email, Active: activeStatus}); err != nil {
 		slog.Warn("error when setting account active", "request_context", r.Context(), "err", err)
 		s.renderAuthError(w, "account_error", err)
 		return
@@ -208,7 +104,7 @@ func (s *Server) handleSetActive(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("account active status changed",
 		"request_id", requestIDFromContext(r.Context()),
-		"email_hash", hashEmail(userEmail),
+		"email_hash", hashEmail(user.Email),
 		"active", activeStatus,
 	)
 
@@ -216,11 +112,6 @@ func (s *Server) handleSetActive(w http.ResponseWriter, r *http.Request) {
 	if activeStatus {
 		message = "Daily emails resumed."
 	}
-	slog.Info("account active status changed",
-		"request_id", requestIDFromContext(r.Context()),
-		"email_hash", hashEmail(userEmail),
-		"active", activeStatus,
-	)
 	s.renderFragment(w, http.StatusOK, "account_active_status", accountStatusFragment{
 		Kind:    "status",
 		Message: message,
@@ -228,16 +119,29 @@ func (s *Server) handleSetActive(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// DeleteAccount permanently removes the profile and every session for the user.
 func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
-	userEmail := emailFromContext(r.Context())
+	user, ok := userFromContext(r.Context())
+	if !ok {
+		writePage(w, http.StatusInternalServerError, genericErrorMessage)
+		return
+	}
 
-	if err := s.AuthService.DeleteAccount(r.Context(), userEmail); err != nil {
+	// Revoke sessions first. If the profile delete then fails, the user is
+	// signed out rather than left with a session that would recreate a profile.
+	if err := s.AuthService.LogoutAll(r.Context(), user.Email); err != nil {
+		slog.Warn("error when signing out before account deletion", "request_context", r.Context(), "err", err)
+		s.renderAuthError(w, "account_error", err)
+		return
+	}
+
+	if err := s.Users.DeleteUser(r.Context(), user.Email); err != nil {
 		slog.Warn("error when deleting account", "request_context", r.Context(), "err", err)
 		s.renderAuthError(w, "account_error", err)
 		return
 	}
 
 	s.clearSessionCookie(w)
-	slog.Info("account deleted", "request_id", requestIDFromContext(r.Context()), "email_hash", hashEmail(userEmail))
+	slog.Info("account deleted", "request_id", requestIDFromContext(r.Context()), "email_hash", hashEmail(user.Email))
 	writeHXRedirect(w, "/sign-in")
 }
