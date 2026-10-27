@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	dailyEmailSubject = "Cloud Mail`"
+	dailyEmailSubject = "Cloud Mail"
 	dailyEmailBody    = "Enjoy the clouds today!"
 
 	lowImageThreshold = 7
