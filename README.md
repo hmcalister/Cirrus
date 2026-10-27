@@ -60,6 +60,8 @@ All runtime configuration is environment variables. `internal/config` reads them
 
 The database container reads `.env` directly for its own `POSTGRES_*` setup.
 
+Both the server and the mailer write logs to stdout and to disk for inspection. Lumberjack handles log rotations for on-disk files.
+
 ## Directory layout
 
 | Path | Purpose |
