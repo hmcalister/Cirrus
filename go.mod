@@ -10,6 +10,7 @@ require (
 	github.com/hmcalister/skysatchel v1.0.2
 	github.com/hmcalister/stratus v1.0.2
 	github.com/jackc/pgx/v5 v5.11.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (
