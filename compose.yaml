@@ -58,6 +58,8 @@ services:
     user: "65532:65532"
     tmpfs:
       - /tmp
+    volumes:
+      - ./logs/server:/var/log/cirrus:Z,U
     networks:
       - app-network
     security_opt:
@@ -88,6 +90,8 @@ services:
     user: "65532:65532"
     tmpfs:
       - /tmp
+    volumes:
+      - ./logs/mailer:/var/log/cirrus:Z,U
     networks:
       - app-network
     security_opt:
