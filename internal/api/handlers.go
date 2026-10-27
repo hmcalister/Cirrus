@@ -171,7 +171,7 @@ func (s *Server) handleSetActive(ctx context.Context, in *setActiveInput) (*setA
 
 	slog.Info("account active status changed",
 		"request_id", requestIDFromContext(ctx),
-		"email_hash", hashEmail(user.Email),
+		"email_hash", hashIdentifier(user.Email),
 		"active", in.Body.Active,
 	)
 
@@ -216,7 +216,7 @@ func (s *Server) handleDeleteAccount(ctx context.Context, _ *struct{}) (*deleteA
 		return nil, huma.Error500InternalServerError("unable to delete account")
 	}
 
-	slog.Info("account deleted", "request_id", requestIDFromContext(ctx), "email_hash", hashEmail(user.Email))
+	slog.Info("account deleted", "request_id", requestIDFromContext(ctx), "email_hash", hashIdentifier(user.Email))
 	return &deleteAccountOutput{}, nil
 }
 

@@ -107,18 +107,20 @@ func routePattern(r *http.Request) string {
 	return r.URL.Path
 }
 
-func hashEmail(userEmail string) string {
-	if userEmail == "" {
+// Hashes an identifier so that emails and addresses do not reach the log file.
+func hashIdentifier(value string) string {
+	if value == "" {
 		return ""
 	}
 
-	sum := sha256.Sum256([]byte(userEmail))
+	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:8])
 }
 
 func newRequestID() string {
 	raw := make([]byte, 8)
 	if _, err := rand.Read(raw); err != nil {
+		slog.Debug("could not read random request id", "err", err)
 		return time.Now().Format("20060102150405.000000000")
 	}
 	return hex.EncodeToString(raw)
