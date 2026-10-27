@@ -48,10 +48,14 @@ RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ ./cmd/server ./cmd/mailer
 
+# The runtime copies this directory into the image, which gives a named volume mounted over it the same ownership.
+RUN mkdir -p /out/logs
+
 FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=build /out/server /app/server
 COPY --from=build /out/mailer /app/mailer
+COPY --from=build --chown=nonroot:nonroot /out/logs /var/log/cirrus
 
 USER nonroot:nonroot
 EXPOSE 8080

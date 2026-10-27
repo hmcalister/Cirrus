@@ -59,7 +59,7 @@ services:
     tmpfs:
       - /tmp
     volumes:
-      - ./logs/server:/var/log/cirrus:Z,U
+      - server-logs:/var/log/cirrus
     networks:
       - app-network
     security_opt:
@@ -91,7 +91,7 @@ services:
     tmpfs:
       - /tmp
     volumes:
-      - ./logs/mailer:/var/log/cirrus:Z,U
+      - mailer-logs:/var/log/cirrus
     networks:
       - app-network
     security_opt:
@@ -156,3 +156,5 @@ networks:
 
 volumes:
   database-data:
+  server-logs:
+  mailer-logs:
