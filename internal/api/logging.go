@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log/slog"
+	"net"
 	"net/http"
+	"runtime/debug"
 	"time"
 )
 
@@ -33,7 +35,7 @@ func (rec *statusRecorder) Write(body []byte) (int, error) {
 	return written, err
 }
 
-// Logs every request that reaches the mux.
+// Logs every request that reaches the mux, and recovers a panic so that the request is still logged.
 func (s *Server) logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestID := r.Header.Get(requestIDHeader)
@@ -45,23 +47,57 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 
 		start := s.now()
 		recorder := &statusRecorder{ResponseWriter: w}
+
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				slog.Error("panic while handling request",
+					"request_id", requestID,
+					"method", r.Method,
+					"route", routePattern(r),
+					"panic", recovered,
+					"stack", string(debug.Stack()),
+				)
+				// The response may already be started, in which case the status cannot change.
+				if recorder.status == 0 {
+					http.Error(recorder, "internal server error", http.StatusInternalServerError)
+				}
+			}
+
+			status := recorder.status
+			if status == 0 {
+				status = http.StatusOK
+			}
+
+			level := slog.LevelInfo
+			switch {
+			case status >= 500:
+				level = slog.LevelError
+			case status >= 400:
+				level = slog.LevelWarn
+			}
+
+			slog.Log(r.Context(), level, "request",
+				"request_id", requestID,
+				"method", r.Method,
+				"route", routePattern(r),
+				"status", status,
+				"bytes", recorder.bytes,
+				"duration", time.Since(start),
+				"remote_addr_hash", hashIdentifier(remoteHost(r.RemoteAddr)),
+			)
+		}()
+
 		next.ServeHTTP(recorder, r)
-
-		status := recorder.status
-		if status == 0 {
-			status = http.StatusOK
-		}
-
-		slog.Info("request",
-			"request_id", requestID,
-			"method", r.Method,
-			"route", routePattern(r),
-			"status", status,
-			"bytes", recorder.bytes,
-			"duration", time.Since(start),
-			"remote_addr", r.RemoteAddr,
-		)
 	})
+}
+
+// Returns the address without its port, so that all requests from one host hash the same.
+func remoteHost(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return remoteAddr
+	}
+	return host
 }
 
 func routePattern(r *http.Request) string {
