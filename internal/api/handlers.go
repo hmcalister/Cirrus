@@ -165,13 +165,13 @@ func (s *Server) handleSetActive(ctx context.Context, in *setActiveInput) (*setA
 	}
 
 	if err := s.Users.SetActive(ctx, database.SetActiveParams{Email: user.Email, Active: in.Body.Active}); err != nil {
-		slog.Warn("error when setting account active", "request_id", requestIDFromContext(ctx), "err", err)
+		slog.Error("error when setting account active", "request_id", requestIDFromContext(ctx), "err", err)
 		return nil, huma.Error500InternalServerError("unable to update account")
 	}
 
 	slog.Info("account active status changed",
 		"request_id", requestIDFromContext(ctx),
-		"email_hash", hashEmail(user.Email),
+		"email_hash", hashIdentifier(user.Email),
 		"active", in.Body.Active,
 	)
 
@@ -207,16 +207,16 @@ func (s *Server) handleDeleteAccount(ctx context.Context, _ *struct{}) (*deleteA
 	// Revoke sessions first. If the profile delete then fails, the user is
 	// signed out rather than left with a session that would recreate a profile.
 	if err := s.AuthService.LogoutAll(ctx, user.Email); err != nil {
-		slog.Warn("error when signing out before account deletion", "request_id", requestIDFromContext(ctx), "err", err)
+		slog.Error("error when signing out before account deletion", "request_id", requestIDFromContext(ctx), "err", err)
 		return nil, huma.Error500InternalServerError("unable to delete account")
 	}
 
 	if err := s.Users.DeleteUser(ctx, user.Email); err != nil {
-		slog.Warn("error when deleting account", "request_id", requestIDFromContext(ctx), "err", err)
+		slog.Error("error when deleting account", "request_id", requestIDFromContext(ctx), "err", err)
 		return nil, huma.Error500InternalServerError("unable to delete account")
 	}
 
-	slog.Info("account deleted", "request_id", requestIDFromContext(ctx), "email_hash", hashEmail(user.Email))
+	slog.Info("account deleted", "request_id", requestIDFromContext(ctx), "email_hash", hashIdentifier(user.Email))
 	return &deleteAccountOutput{}, nil
 }
 
@@ -249,19 +249,19 @@ func (s *Server) registerAdminStatsOperation() {
 func (s *Server) handleAdminStats(ctx context.Context, _ *struct{}) (*adminStatsOutput, error) {
 	userAccounts, err := s.Users.CountUsers(ctx)
 	if err != nil {
-		slog.Warn("error when counting user accounts", "request_id", requestIDFromContext(ctx), "err", err)
+		slog.Error("error when counting user accounts", "request_id", requestIDFromContext(ctx), "err", err)
 		return nil, huma.Error500InternalServerError("unable to load statistics")
 	}
 
 	activeUsers, err := s.Users.CountActiveUsers(ctx)
 	if err != nil {
-		slog.Warn("error when counting active users", "request_id", requestIDFromContext(ctx), "err", err)
+		slog.Error("error when counting active users", "request_id", requestIDFromContext(ctx), "err", err)
 		return nil, huma.Error500InternalServerError("unable to load statistics")
 	}
 
 	files, err := s.Files.ListFiles(ctx)
 	if err != nil {
-		slog.Warn("error when listing cloud images", "request_id", requestIDFromContext(ctx), "err", err)
+		slog.Error("error when listing cloud images", "request_id", requestIDFromContext(ctx), "err", err)
 		return nil, huma.Error500InternalServerError("unable to load statistics")
 	}
 

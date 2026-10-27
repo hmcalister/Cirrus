@@ -1,11 +1,13 @@
 package api
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"slices"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/hmcalister/stratus/pkg/auth"
 )
 
 // Huma middleware that validates the Stratus session, creates the application profile for the authenticated identity, and attaches that profile to the request context.
@@ -14,13 +16,17 @@ func (s *Server) requireUser(ctx huma.Context, next func(huma.Context)) {
 
 	identity, err := s.AuthService.ValidateSession(ctx.Context(), rawToken)
 	if err != nil {
+		// A missing or expired session is the normal case. Anything else means the session store failed.
+		if !errors.Is(err, auth.ErrUnauthenticated) {
+			slog.Error("error validating session", "request_id", requestIDFromContext(ctx.Context()), "err", err)
+		}
 		_ = huma.WriteErr(s.api, ctx, http.StatusUnauthorized, "a valid session is required")
 		return
 	}
 
 	user, err := s.Users.GetOrCreateUser(ctx.Context(), identity.Email)
 	if err != nil {
-		slog.Error("error ensuring user profile", "email_hash", hashEmail(identity.Email), "err", err)
+		slog.Error("error ensuring user profile", "email_hash", hashIdentifier(identity.Email), "err", err)
 		_ = huma.WriteErr(s.api, ctx, http.StatusInternalServerError, "unable to load account")
 		return
 	}
@@ -35,6 +41,7 @@ func (s *Server) makeRequiredRoleMiddleware(role string) func(huma.Context, func
 	return func(ctx huma.Context, next func(huma.Context)) {
 		user, ok := userFromContext(ctx.Context())
 		if !ok {
+			slog.Error("account profile missing from request context", "request_id", requestIDFromContext(ctx.Context()))
 			_ = huma.WriteErr(s.api, ctx, http.StatusInternalServerError, "account profile unavailable")
 			return
 		}

@@ -58,6 +58,8 @@ services:
     user: "65532:65532"
     tmpfs:
       - /tmp
+    volumes:
+      - server-logs:/var/log/cirrus
     networks:
       - app-network
     security_opt:
@@ -88,6 +90,8 @@ services:
     user: "65532:65532"
     tmpfs:
       - /tmp
+    volumes:
+      - mailer-logs:/var/log/cirrus
     networks:
       - app-network
     security_opt:
@@ -152,3 +156,5 @@ networks:
 
 volumes:
   database-data:
+  server-logs:
+  mailer-logs:

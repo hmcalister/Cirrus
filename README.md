@@ -60,6 +60,16 @@ All runtime configuration is environment variables. `internal/config` reads them
 
 The database container reads `.env` directly for its own `POSTGRES_*` setup.
 
+Both the server and the mailer write logs to stdout and to disk for inspection. Lumberjack handles log rotations for on-disk files.
+
+The files are `/var/log/cirrus/cirrus.log` inside each container, mounted from the `server-logs` and `mailer-logs` volumes.
+
+```sh
+LOG_DIR=$(podman volume inspect cirrus_server-logs --format '{{.Mountpoint}}')
+
+grep '"level":"ERROR"' "$LOG_DIR/cirrus.log" | jq -r 'select(.time > "2026-10-27T00:00:00Z") | [.time, .msg, .err] | @tsv'
+```
+
 ## Directory layout
 
 | Path | Purpose |
