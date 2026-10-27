@@ -52,12 +52,14 @@ func run() error {
 
 	pool, err := postgres.Connect(ctx, cfg.Database)
 	if err != nil {
+		slog.Error("could not reach database", "err", err)
 		return err
 	}
 	defer pool.Close()
 
 	files, err := s3.New(ctx, cfg.S3)
 	if err != nil {
+		slog.Error("could not reach cloud bucket", "err", err)
 		return fmt.Errorf("connecting to cloud image bucket: %w", err)
 	}
 
@@ -71,6 +73,7 @@ func run() error {
 		Timeout:     cfg.Email.Timeout,
 	})
 	if err != nil {
+		slog.Error("error while creating new skysender smtp sender", "err", err)
 		return err
 	}
 
@@ -83,6 +86,7 @@ func run() error {
 		SweepCadenceDuration: cfg.EmailRateLimit.SweepCadenceDuration,
 	})
 	if err != nil {
+		slog.Error("error while creating new rate limited skysender", "err", err)
 		return err
 	}
 
@@ -110,6 +114,7 @@ func run() error {
 		},
 	})
 	if err != nil {
+		slog.Error("error while creating new auth service", "err", err)
 		return err
 	}
 
@@ -124,6 +129,7 @@ func run() error {
 		SessionCookieName: sessionCookieName,
 	})
 	if err != nil {
+		slog.Error("error while creating new api server", "err", err)
 		return err
 	}
 
@@ -146,6 +152,7 @@ func run() error {
 
 	select {
 	case err := <-serveErr:
+		slog.Error("http server failed", "err", err)
 		return err
 	case <-ctx.Done():
 		slog.Info("shutdown signal received")
@@ -153,5 +160,11 @@ func run() error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.HTTP.ShutdownTimeout)
 	defer cancel()
-	return server.Shutdown(shutdownCtx)
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("error during shutdown", "err", err)
+		return err
+	}
+
+	slog.Info("server stopped")
+	return nil
 }

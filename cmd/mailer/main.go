@@ -57,7 +57,7 @@ type dailyEmailer struct {
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error("fatal error", "error", err)
+		slog.Error("fatal error", "err", err)
 		os.Exit(1)
 	}
 }
@@ -76,6 +76,7 @@ func run() error {
 
 	pool, err := postgres.Connect(ctx, cfg.Database)
 	if err != nil {
+		slog.Error("could not reach database", "err", err)
 		return err
 	}
 	defer pool.Close()
@@ -90,11 +91,13 @@ func run() error {
 		Timeout:     cfg.Email.Timeout,
 	})
 	if err != nil {
+		slog.Error("error while creating new skysender smtp sender", "err", err)
 		return err
 	}
 
 	files, err := s3.New(ctx, cfg.S3)
 	if err != nil {
+		slog.Error("could not reach cloud bucket", "err", err)
 		return fmt.Errorf("connecting to cloud image bucket: %w", err)
 	}
 
@@ -110,11 +113,12 @@ func run() error {
 		next := nextSendTime(time.Now(), cfg.DailyEmail)
 		slog.Info("waiting for the next daily email", "at", next)
 		if !waitUntil(ctx, next) {
+			slog.Info("shutdown signal received")
 			return nil
 		}
 
 		if err := daily.send(ctx); err != nil {
-			slog.Error("daily email run failed", "error", err)
+			slog.Error("daily email run failed", "err", err)
 		}
 	}
 }
@@ -160,7 +164,7 @@ func (d dailyEmailer) send(ctx context.Context) error {
 	sent := 0
 	for batch := range slices.Chunk(emails, d.batchSize) {
 		if err := d.sendBatch(ctx, batch, cloud.attachment); err != nil {
-			slog.Warn("failed to send daily email batch", "recipients", len(batch), "error", err)
+			slog.Warn("failed to send daily email batch", "recipients", len(batch), "err", err)
 			continue
 		}
 		sent += len(batch)
@@ -170,11 +174,11 @@ func (d dailyEmailer) send(ctx context.Context) error {
 
 	if sent > 0 {
 		if err := d.files.DeleteFile(ctx, cloud.name); err != nil {
-			slog.Warn("failed to delete sent cloud image", "name", cloud.name, "error", err)
+			slog.Warn("failed to delete sent cloud image", "name", cloud.name, "err", err)
 		}
 
 		if err := d.alertWhenImagesLow(ctx); err != nil {
-			slog.Warn("failed to alert admins about low images", "error", err)
+			slog.Warn("failed to alert admins about low images", "err", err)
 		}
 	}
 

@@ -9,7 +9,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 
@@ -60,7 +60,8 @@ func main() {
 		},
 	})
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("error while creating new auth service", "err", err)
+		os.Exit(1)
 	}
 
 	mux := http.NewServeMux()
@@ -74,22 +75,26 @@ func main() {
 		SessionCookieName: api.SessionCookieName(true),
 	})
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("error while creating new api server", "err", err)
+		os.Exit(1)
 	}
 
 	spec, err := server.OpenAPI().YAML()
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("error while generating openapi spec", "err", err)
+		os.Exit(1)
 	}
 
 	if *outPath != "" {
 		if err := os.WriteFile(*outPath, spec, 0o644); err != nil {
-			log.Fatal(err)
+			slog.Error("error while writing openapi spec", "err", err)
+			os.Exit(1)
 		}
 		return
 	}
 
 	if _, err := fmt.Fprint(os.Stdout, string(spec)); err != nil {
-		log.Fatal(err)
+		slog.Error("error while writing openapi spec", "err", err)
+		os.Exit(1)
 	}
 }
