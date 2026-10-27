@@ -17,6 +17,12 @@ const logFilePath = "/var/log/cirrus/cirrus.log"
 func Setup(debug bool) {
 	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
 
+	// The container user owns the file, but it must stay readable from the host. Lumberjack copies the mode of an existing file on rotation, so setting it here covers every later file.
+	if created, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
+		_ = created.Close()
+		_ = os.Chmod(logFilePath, 0o644)
+	}
+
 	file := &lumberjack.Logger{
 		Filename:   logFilePath,
 		MaxSize:    10,
