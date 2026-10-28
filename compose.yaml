@@ -1,5 +1,5 @@
 x-common-environment: &common-environment
-  # DEBUG: "true"
+  DEBUG: "true"
   POSTGRES_HOST: database-container
   POSTGRES_PORT: 5432
   DB_MAX_CONNS: ${DB_MAX_CONNS:-10}
@@ -50,10 +50,9 @@ x-mailer-environment: &mailer-environment
 
 services:
   app-container:
-    build:
-      context: .
+    image: localhost/${PROJECT_NAME:-cirrus}:${PROJECT_TAG:-latest}
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${HTTP_PORT:-8080}:8080"
     depends_on:
       database-container:
         condition: service_healthy
@@ -83,8 +82,7 @@ services:
     restart: unless-stopped
 
   mailer-container:
-    build:
-      context: .
+    image: localhost/${PROJECT_NAME:-cirrus}:${PROJECT_TAG:-latest}
     entrypoint: ["/app/mailer"]
     depends_on:
       database-container:
@@ -132,8 +130,8 @@ services:
       retries: 5
       start_period: 10s
     volumes:
-      - ./sqlc/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
-      - database-data:/var/lib/postgresql/data
+      - ./sqlc/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro,Z
+      - database-data:/var/lib/postgresql
     networks:
       - app-network
     security_opt:
@@ -145,6 +143,7 @@ services:
       - SETGID
       - SETUID
       - DAC_OVERRIDE
+      - FOWNER
     deploy:
       resources:
         limits:
