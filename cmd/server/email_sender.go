@@ -9,20 +9,21 @@ import (
 	"github.com/hmcalister/skysatchel/pkg/email/skysender/ratelimit"
 )
 
-var _ skysender.Sender = StdoutSender{}
+var _ skysender.Sender = stdoutSender{}
 
-type StdoutSender struct{}
+type stdoutSender struct{}
 
 // Send implements [skysender.Sender].
-func (s StdoutSender) Send(ctx context.Context, params skysender.SendParams) error {
+func (s stdoutSender) Send(ctx context.Context, params skysender.SendParams) error {
 	slog.Debug("sender invoked", "send_params", params)
 	return nil
 }
 
 func constructSender(cfg config.ServerConfig) (*skysender.Sender, error) {
 	var emailSender skysender.Sender
-	if !cfg.Debug {
-		emailSender = StdoutSender{}
+	if cfg.Debug {
+		slog.Info("debug sender")
+		emailSender = stdoutSender{}
 	} else {
 		baseSender, err := skysender.NewSMTPSender(skysender.SMTPConfig{
 			Host:        cfg.Email.Host,
