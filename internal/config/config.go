@@ -53,6 +53,12 @@ const (
 	envAuthSessionExpiry = "AUTH_SESSION_EXPIRY"
 	envAuthBaseURL       = "AUTH_BASE_URL"
 
+	envAuthRateLimitEmailBurst    = "AUTH_RATE_LIMIT_EMAIL_BURST"
+	envAuthRateLimitEmailInterval = "AUTH_RATE_LIMIT_EMAIL_INTERVAL"
+	envAuthRateLimitIPBurst       = "AUTH_RATE_LIMIT_IP_BURST"
+	envAuthRateLimitIPInterval    = "AUTH_RATE_LIMIT_IP_INTERVAL"
+	envAuthRateLimitRevealDenials = "AUTH_RATE_LIMIT_REVEAL_DENIALS"
+
 	envDailyEmailTime         = "DAILY_EMAIL_TIME"
 	envDailyEmailBCCBatchSize = "DAILY_EMAIL_BCC_BATCH_SIZE"
 
@@ -92,6 +98,14 @@ func (l *loader) int32(key string) int32 {
 
 func (l *loader) int(key string) int {
 	return int(l.int32(key))
+}
+
+func (l *loader) bool(key string) bool {
+	value, err := requiredBool(key)
+	if err != nil {
+		l.errs = append(l.errs, err)
+	}
+	return value
 }
 
 func (l *loader) clock(key string) (int, int) {
@@ -142,6 +156,18 @@ func requiredInt32(key string) (int32, error) {
 		return 0, fmt.Errorf("environment variable %s is not an int32: %w", key, err)
 	}
 	return int32(i), nil
+}
+
+func requiredBool(key string) (bool, error) {
+	value, err := requiredEnv(key)
+	if err != nil {
+		return false, err
+	}
+	b, err := strconv.ParseBool(value)
+	if err != nil {
+		return false, fmt.Errorf("environment variable %s is not a bool: %w", key, err)
+	}
+	return b, nil
 }
 
 // Parse a time of day given as HH:MM and return its hour and minute.

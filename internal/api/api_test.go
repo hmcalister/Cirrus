@@ -147,7 +147,7 @@ func (s *stubFileStore) DeleteFile(_ context.Context, _ string) error {
 	return nil
 }
 
-var _ filestore.FileGetter = (*stubFileStore)(nil)
+var _ filestore.FileStore = (*stubFileStore)(nil)
 
 func newTestServer(t *testing.T, authService *stubAuthService, users *stubUserStore) *Server {
 	t.Helper()

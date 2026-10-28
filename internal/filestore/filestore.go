@@ -3,9 +3,9 @@ package filestore
 
 import "context"
 
-var _ FileGetter = NoOpStore{}
+var _ FileStore = NoOpStore{}
 
-type FileGetter interface {
+type FileStore interface {
 	// Returns the name of every file in the store.
 	ListFiles(ctx context.Context) ([]string, error)
 	// Returns the contents of the named file.

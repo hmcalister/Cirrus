@@ -12,7 +12,7 @@ import (
 type ServerConfig struct {
 	AuthService       authService
 	Users             userStore
-	Files             filestore.FileGetter
+	Files             filestore.FileStore
 	SessionCookieName string
 }
 

@@ -15,7 +15,7 @@ import (
 	"github.com/hmcalister/cirrus/internal/filestore"
 )
 
-var _ filestore.FileGetter = (*Store)(nil)
+var _ filestore.FileStore = (*Store)(nil)
 
 type Store struct {
 	client *awss3.Client

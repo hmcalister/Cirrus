@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,21 +16,15 @@ import (
 	"github.com/hmcalister/cirrus/internal/api"
 	"github.com/hmcalister/cirrus/internal/config"
 	"github.com/hmcalister/cirrus/internal/database"
-	"github.com/hmcalister/cirrus/internal/filestore/s3"
 	"github.com/hmcalister/cirrus/internal/logging"
 	"github.com/hmcalister/cirrus/internal/postgres"
 	skysatchel "github.com/hmcalister/skysatchel/pkg/email"
-	"github.com/hmcalister/skysatchel/pkg/email/skysender"
-	"github.com/hmcalister/skysatchel/pkg/email/skysender/ratelimit"
 	"github.com/hmcalister/stratus/pkg/auth"
 	"github.com/hmcalister/stratus/pkg/sessionstore"
 )
 
-const magicLinkEmailBody = `Sign in to Cirrus by visiting the link below:
-
-%s
-
-This link expires shortly and can only be used once. If you did not request it, you can ignore this email.`
+//go:embed magic_link_template.txt
+var magicLinkEmailBody string
 
 func main() {
 	if err := run(); err != nil {
@@ -57,36 +52,15 @@ func run() error {
 	}
 	defer pool.Close()
 
-	files, err := s3.New(ctx, cfg.S3)
+	files, err := getFileStore(ctx, cfg)
 	if err != nil {
-		slog.Error("could not reach cloud bucket", "err", err)
-		return fmt.Errorf("connecting to cloud image bucket: %w", err)
-	}
-
-	emailSender, err := skysender.NewSMTPSender(skysender.SMTPConfig{
-		Host:        cfg.Email.Host,
-		Port:        cfg.Email.Port,
-		Username:    cfg.Email.Username,
-		Password:    cfg.Email.Password,
-		FromAddress: cfg.Email.FromAddress,
-		FromName:    cfg.Email.FromName,
-		Timeout:     cfg.Email.Timeout,
-	})
-	if err != nil {
-		slog.Error("error while creating new skysender smtp sender", "err", err)
+		slog.Error("error while constructing filestore", "err", err)
 		return err
 	}
 
-	ratelimitedEmailSender, err := ratelimit.NewRateLimitedSender(ratelimit.RateLimitedSenderConfig{
-		Next:                 emailSender,
-		AddressBurst:         cfg.EmailRateLimit.AddressBurst,
-		AddressInterval:      cfg.EmailRateLimit.AddressInterval,
-		GlobalBurst:          cfg.EmailRateLimit.GlobalBurst,
-		GlobalInterval:       cfg.EmailRateLimit.GlobalInterval,
-		SweepCadenceDuration: cfg.EmailRateLimit.SweepCadenceDuration,
-	})
+	emailSender, err := constructSender(cfg)
 	if err != nil {
-		slog.Error("error while creating new rate limited skysender", "err", err)
+		slog.Error("error while creating email sender", "err", err)
 		return err
 	}
 
@@ -96,7 +70,7 @@ func run() error {
 
 	// Stratus owns authentication.
 	authService, err := auth.New(auth.AuthServiceConfig{
-		Sender:     ratelimitedEmailSender,
+		Sender:     *emailSender,
 		Sessions:   sessionstore.NewMemorySessionStore(),
 		BaseURL:    cfg.AuthHTTP.BaseURL,
 		LinkTTL:    cfg.Auth.LinkExpiryDuration,
@@ -106,12 +80,20 @@ func run() error {
 			Name:   sessionCookieName,
 			Secure: cookieSecure,
 		},
+		RateLimit: auth.RateLimitConfig{
+			EmailBurst:    cfg.AuthRateLimit.EmailBurst,
+			EmailInterval: cfg.AuthRateLimit.EmailInterval,
+			IPBurst:       cfg.AuthRateLimit.IPBurst,
+			IPInterval:    cfg.AuthRateLimit.IPInterval,
+			RevealDenials: cfg.AuthRateLimit.RevealDenials,
+		},
 		LinkEmail: func(link string) skysatchel.Message {
 			return skysatchel.Message{
 				Subject: "Sign in to Cirrus",
 				Body:    fmt.Sprintf(magicLinkEmailBody, link),
 			}
 		},
+		ClientIP: getClientIPMapperFunc(cfg.Debug),
 	})
 	if err != nil {
 		slog.Error("error while creating new auth service", "err", err)

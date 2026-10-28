@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.5
 	github.com/danielgtaylor/huma/v2 v2.39.1
 	github.com/hmcalister/skysatchel v1.0.2
-	github.com/hmcalister/stratus v1.0.2
+	github.com/hmcalister/stratus v1.0.3
 	github.com/jackc/pgx/v5 v5.11.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )

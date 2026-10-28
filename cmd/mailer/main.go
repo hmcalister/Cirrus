@@ -17,7 +17,6 @@ import (
 	"github.com/hmcalister/cirrus/internal/config"
 	"github.com/hmcalister/cirrus/internal/database"
 	"github.com/hmcalister/cirrus/internal/filestore"
-	"github.com/hmcalister/cirrus/internal/filestore/s3"
 	"github.com/hmcalister/cirrus/internal/logging"
 	"github.com/hmcalister/cirrus/internal/postgres"
 	skysatchel "github.com/hmcalister/skysatchel/pkg/email"
@@ -49,7 +48,7 @@ type dailyCloud struct {
 // The configured dependencies of one daily send.
 type dailyEmailer struct {
 	users       userLister
-	files       filestore.FileGetter
+	files       filestore.FileStore
 	sender      skysender.Sender
 	fromAddress string
 	batchSize   int
@@ -81,21 +80,13 @@ func run() error {
 	}
 	defer pool.Close()
 
-	sender, err := skysender.NewSMTPSender(skysender.SMTPConfig{
-		Host:        cfg.Email.Host,
-		Port:        cfg.Email.Port,
-		Username:    cfg.Email.Username,
-		Password:    cfg.Email.Password,
-		FromAddress: cfg.Email.FromAddress,
-		FromName:    cfg.Email.FromName,
-		Timeout:     cfg.Email.Timeout,
-	})
+	sender, err := constructSender(cfg)
 	if err != nil {
-		slog.Error("error while creating new skysender smtp sender", "err", err)
+		slog.Error("error while creating email sender", "err", err)
 		return err
 	}
 
-	files, err := s3.New(ctx, cfg.S3)
+	files, err := getFileStore(ctx, cfg)
 	if err != nil {
 		slog.Error("could not reach cloud bucket", "err", err)
 		return fmt.Errorf("connecting to cloud image bucket: %w", err)
