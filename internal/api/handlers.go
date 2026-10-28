@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/hmcalister/cirrus/internal/database"
@@ -93,8 +94,9 @@ func (s *Server) registerHealthOperation() {
 // ACCOUNT
 
 type Account struct {
-	Email  string `json:"email" doc:"Signed-in email address."`
-	Active bool   `json:"active" doc:"Whether daily emails are delivered."`
+	Email        string    `json:"email" doc:"Signed-in email address."`
+	Active       bool      `json:"active" doc:"Whether daily emails are delivered."`
+	NextCloudsAt time.Time `json:"next_clouds_at" doc:"When the next daily email is sent, in UTC."`
 }
 
 type accountOutput struct {
@@ -123,6 +125,7 @@ func (s *Server) handleAccount(ctx context.Context, _ *struct{}) (*accountOutput
 	out := &accountOutput{}
 	out.Body.Email = user.Email
 	out.Body.Active = user.Active
+	out.Body.NextCloudsAt = s.DailyEmailTime.Next(s.now())
 	return out, nil
 }
 

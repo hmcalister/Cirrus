@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { api } from "@/api/client";
 import type { components } from "@/api/schema";
@@ -10,6 +10,17 @@ const router = useRouter();
 const account = ref<Account | null>(null);
 const error = ref("");
 const toggling = ref(false);
+
+const nextCloudsTime = computed(() => {
+  const at = account.value?.next_clouds_at;
+  if (!at) return "";
+  const minutes = Math.max(
+    0,
+    Math.round((new Date(at).getTime() - Date.now()) / 60000),
+  );
+  const hours = Math.floor(minutes / 60);
+  return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`;
+});
 
 async function load() {
   error.value = "";
@@ -95,6 +106,15 @@ onMounted(load);
                 ? "Emails are being delivered to your inbox."
                 : "Delivery is currently paused."
             }}
+          </p>
+          <p
+            v-if="account.active && nextCloudsTime"
+            class="mt-1 text-sm text-gray-500 dark:text-gray-400"
+          >
+            Next clouds in
+            <span class="font-medium tabular-nums text-gray-900 dark:text-white">
+              {{ nextCloudsTime }}
+            </span>
           </p>
         </div>
         <UButton

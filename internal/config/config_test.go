@@ -97,6 +97,9 @@ func TestLoadServer(t *testing.T) {
 	if cfg.AuthHTTP.BaseURL != "https://cloud.example.com" {
 		t.Errorf("AuthHTTP.BaseURL = %q", cfg.AuthHTTP.BaseURL)
 	}
+	if cfg.DailyEmailTime.Hour != 8 || cfg.DailyEmailTime.Minute != 0 {
+		t.Errorf("DailyEmailTime = %+v, want 08:00", cfg.DailyEmailTime)
+	}
 	if cfg.AuthRateLimit.EmailBurst != 3 || cfg.AuthRateLimit.EmailInterval != 15*time.Minute {
 		t.Errorf("AuthRateLimit email = (%d, %v)", cfg.AuthRateLimit.EmailBurst, cfg.AuthRateLimit.EmailInterval)
 	}
@@ -153,14 +156,24 @@ func TestLoadServerMalformedVariable(t *testing.T) {
 	}
 }
 
-// The server does not schedule the daily email, so it must not need its settings.
-func TestLoadServerIgnoresDailyEmailVariables(t *testing.T) {
+// The server shows when the next email is due but does not send it, so it needs
+// the time but not the BCC batch size.
+func TestLoadServerIgnoresDailyEmailBatchSize(t *testing.T) {
 	setValidEnv(t)
-	t.Setenv(envDailyEmailTime, "")
 	t.Setenv(envDailyEmailBCCBatchSize, "")
 
 	if _, err := LoadServer(); err != nil {
 		t.Fatalf("LoadServer() err = %v, want nil", err)
+	}
+}
+
+func TestLoadServerMalformedDailyEmailTime(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv(envDailyEmailTime, "half past eight")
+
+	_, err := LoadServer()
+	if err == nil || !strings.Contains(err.Error(), envDailyEmailTime) {
+		t.Errorf("LoadServer() err = %v, want error naming %s", err, envDailyEmailTime)
 	}
 }
 
@@ -205,6 +218,40 @@ func TestLoadMailer(t *testing.T) {
 	}
 	if !cfg.Debug {
 		t.Error("Debug = false, want true")
+	}
+}
+
+func TestDailyEmailTimeNext(t *testing.T) {
+	at := DailyEmailTimeConfig{Hour: 8, Minute: 0}
+	sameDay := time.Date(2026, time.October, 26, 8, 0, 0, 0, time.UTC)
+	nextDay := sameDay.AddDate(0, 0, 1)
+
+	tests := []struct {
+		name string
+		now  time.Time
+		want time.Time
+	}{
+		{"before the send time", sameDay.Add(-30 * time.Minute), sameDay},
+		{"at the send time", sameDay, nextDay},
+		{"after the send time", sameDay.Add(time.Hour), nextDay},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := at.Next(tc.now); !got.Equal(tc.want) {
+				t.Errorf("Next(%v) = %v, want %v", tc.now, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestDailyEmailTimeNextConvertsToUTC(t *testing.T) {
+	at := DailyEmailTimeConfig{Hour: 8, Minute: 0}
+	now := time.Date(2026, time.October, 26, 7, 30, 0, 0, time.UTC)
+	// A location east of UTC where it is already the next calendar day.
+	east := time.FixedZone("UTC+10", 10*60*60)
+
+	if got, want := at.Next(now.In(east)), now.Add(30*time.Minute); !got.Equal(want) {
+		t.Errorf("Next() = %v, want %v", got, want)
 	}
 }
 

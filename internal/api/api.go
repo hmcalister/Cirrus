@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/hmcalister/cirrus/internal/config"
 	"github.com/hmcalister/cirrus/internal/filestore"
 )
 
@@ -14,6 +15,7 @@ type ServerConfig struct {
 	Users             userStore
 	Files             filestore.FileStore
 	SessionCookieName string
+	DailyEmailTime    config.DailyEmailTimeConfig
 }
 
 type Server struct {

@@ -9,9 +9,11 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
+	"github.com/hmcalister/cirrus/internal/config"
 	"github.com/hmcalister/cirrus/internal/database"
 	"github.com/hmcalister/cirrus/internal/filestore"
 	skysatchel "github.com/hmcalister/skysatchel/pkg/email"
@@ -307,8 +309,9 @@ func TestAccountCreatesProfileAndReturnsJSON(t *testing.T) {
 	}
 
 	body := decodeBody[struct {
-		Email  string `json:"email"`
-		Active bool   `json:"active"`
+		Email        string    `json:"email"`
+		Active       bool      `json:"active"`
+		NextCloudsAt time.Time `json:"next_clouds_at"`
 	}](t, recorder)
 	if body.Email != testEmail {
 		t.Errorf("email = %q, want %q", body.Email, testEmail)
@@ -316,8 +319,38 @@ func TestAccountCreatesProfileAndReturnsJSON(t *testing.T) {
 	if !body.Active {
 		t.Error("new profile should be active")
 	}
+	if body.NextCloudsAt.IsZero() {
+		t.Error("next_clouds_at is missing")
+	}
 	if _, ok := users.users[testEmail]; !ok {
 		t.Error("request did not create a user profile")
+	}
+}
+
+func TestAccountReportsNextCloudsAt(t *testing.T) {
+	users := newStubUserStore()
+	server := newTestServerWith(t, ServerConfig{
+		AuthService:       &stubAuthService{identity: auth.Identity{Email: testEmail}},
+		Users:             users,
+		Files:             &stubFileStore{},
+		SessionCookieName: secureSessionCookieName,
+		DailyEmailTime:    config.DailyEmailTimeConfig{Hour: 8, Minute: 0},
+	})
+	server.now = func() time.Time {
+		return time.Date(2026, time.October, 26, 7, 30, 0, 0, time.UTC)
+	}
+
+	recorder := getWithCookie(t, server, "/api/account", testToken)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	body := decodeBody[struct {
+		NextCloudsAt time.Time `json:"next_clouds_at"`
+	}](t, recorder)
+	want := time.Date(2026, time.October, 26, 8, 0, 0, 0, time.UTC)
+	if !body.NextCloudsAt.Equal(want) {
+		t.Errorf("next_clouds_at = %v, want %v", body.NextCloudsAt, want)
 	}
 }
 

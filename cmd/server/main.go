@@ -109,6 +109,7 @@ func run() error {
 		Users:             database.New(pool),
 		Files:             files,
 		SessionCookieName: sessionCookieName,
+		DailyEmailTime:    cfg.DailyEmailTime,
 	})
 	if err != nil {
 		slog.Error("error while creating new api server", "err", err)

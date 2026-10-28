@@ -1,5 +1,5 @@
 x-common-environment: &common-environment
-  # DEBUG: "true"
+  DEBUG: ${DEBUG:-}
   POSTGRES_HOST: database-container
   POSTGRES_PORT: 5432
   DB_MAX_CONNS: ${DB_MAX_CONNS:-10}
@@ -41,6 +41,7 @@ x-server-environment: &server-environment
   AUTH_RATE_LIMIT_IP_BURST: ${AUTH_RATE_LIMIT_IP_BURST:-10}
   AUTH_RATE_LIMIT_IP_INTERVAL: ${AUTH_RATE_LIMIT_IP_INTERVAL:-5m}
   AUTH_RATE_LIMIT_REVEAL_DENIALS: ${AUTH_RATE_LIMIT_REVEAL_DENIALS:-true}
+  DAILY_EMAIL_TIME: ${DAILY_EMAIL_TIME:-08:00}
 
 
 x-mailer-environment: &mailer-environment

@@ -11,6 +11,7 @@ type ServerConfig struct {
 	Auth           AuthenticationConfig
 	AuthRateLimit  AuthRateLimitConfig
 	AuthHTTP       AuthHTTPConfig
+	DailyEmailTime DailyEmailTimeConfig
 	S3             S3Config
 	Debug          bool
 }
@@ -24,6 +25,7 @@ func LoadServer() (ServerConfig, error) {
 	auth, authErr := loadAuth()
 	authRateLimit, authRateLimitErr := loadAuthRateLimit()
 	authHTTP, authHTTPErr := loadAuthHTTP()
+	dailyEmailTime, dailyEmailTimeErr := loadDailyEmailTime()
 	s3, s3Err := loadS3()
 
 	cfg := ServerConfig{
@@ -34,9 +36,10 @@ func LoadServer() (ServerConfig, error) {
 		Auth:           auth,
 		AuthRateLimit:  authRateLimit,
 		AuthHTTP:       authHTTP,
+		DailyEmailTime: dailyEmailTime,
 		S3:             s3,
 		Debug:          debugEnabled(),
 	}
 
-	return cfg, errors.Join(httpErr, databaseErr, emailErr, rateLimitErr, authErr, authRateLimitErr, authHTTPErr, s3Err)
+	return cfg, errors.Join(httpErr, databaseErr, emailErr, rateLimitErr, authErr, authRateLimitErr, authHTTPErr, dailyEmailTimeErr, s3Err)
 }
