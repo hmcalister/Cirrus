@@ -48,6 +48,12 @@ func setValidEnv(t *testing.T) {
 		envAuthSessionExpiry: "720h",
 		envAuthBaseURL:       "https://cloud.example.com",
 
+		envAuthRateLimitEmailBurst:    "3",
+		envAuthRateLimitEmailInterval: "15m",
+		envAuthRateLimitIPBurst:       "20",
+		envAuthRateLimitIPInterval:    "45s",
+		envAuthRateLimitRevealDenials: "true",
+
 		envDailyEmailTime:         "08:00",
 		envDailyEmailBCCBatchSize: "50",
 
@@ -90,6 +96,15 @@ func TestLoadServer(t *testing.T) {
 	}
 	if cfg.AuthHTTP.BaseURL != "https://cloud.example.com" {
 		t.Errorf("AuthHTTP.BaseURL = %q", cfg.AuthHTTP.BaseURL)
+	}
+	if cfg.AuthRateLimit.EmailBurst != 3 || cfg.AuthRateLimit.EmailInterval != 15*time.Minute {
+		t.Errorf("AuthRateLimit email = (%d, %v)", cfg.AuthRateLimit.EmailBurst, cfg.AuthRateLimit.EmailInterval)
+	}
+	if cfg.AuthRateLimit.IPBurst != 20 || cfg.AuthRateLimit.IPInterval != 45*time.Second {
+		t.Errorf("AuthRateLimit ip = (%d, %v)", cfg.AuthRateLimit.IPBurst, cfg.AuthRateLimit.IPInterval)
+	}
+	if !cfg.AuthRateLimit.RevealDenials {
+		t.Error("AuthRateLimit.RevealDenials = false, want true")
 	}
 	if cfg.S3.Bucket != "cirrus-clouds" || cfg.S3.Region != "nyc3" {
 		t.Errorf("S3 = %+v", cfg.S3)
@@ -230,6 +245,7 @@ func TestLoadMailerIgnoresServerVariables(t *testing.T) {
 	t.Setenv(envHTTPAddr, "")
 	t.Setenv(envAuthBaseURL, "")
 	t.Setenv(envEmailRateLimitAddressBurst, "")
+	t.Setenv(envAuthRateLimitEmailBurst, "")
 
 	if _, err := LoadMailer(); err != nil {
 		t.Fatalf("LoadMailer() err = %v, want nil", err)
