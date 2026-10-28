@@ -1,5 +1,5 @@
 x-common-environment: &common-environment
-  DEBUG: "true"
+  # DEBUG: "true"
   POSTGRES_HOST: database-container
   POSTGRES_PORT: 5432
   DB_MAX_CONNS: ${DB_MAX_CONNS:-10}
