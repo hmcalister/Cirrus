@@ -134,7 +134,7 @@ type Account = components["schemas"]["Account"];
 Set your project tag in `.env`, build the image on your host and send to your remote:
 ```sh
 make image
-podman image scp localhost/cirrus:<PROJECT_TAG> <REMOTE ADDRESS>
+podman image scp localhost/cirrus:<PROJECT_TAG> <REMOTE ADDRESS>::
 ```
 
 On your remote, clone the repo (or just the compose.yaml file), set your production `.env`, and run:
