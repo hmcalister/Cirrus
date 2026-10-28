@@ -115,8 +115,9 @@ func run() error {
 		return err
 	}
 
+	addr := fmt.Sprintf(":%d", cfg.HTTP.Port)
 	server := &http.Server{
-		Addr:              cfg.HTTP.Addr,
+		Addr:              addr,
 		Handler:           apiServer.Routes(),
 		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
 		ReadTimeout:       cfg.HTTP.ReadTimeout,
@@ -126,7 +127,7 @@ func run() error {
 
 	serveErr := make(chan error, 1)
 	go func() {
-		slog.Info("ready to serve", "addr", cfg.HTTP.Addr)
+		slog.Info("ready to serve", "addr", addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serveErr <- err
 		}

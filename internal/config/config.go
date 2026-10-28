@@ -16,7 +16,7 @@ import (
 const (
 	envDebug = "DEBUG"
 
-	envHTTPAddr              = "HTTP_ADDR"
+	envHTTPPort              = "HTTP_PORT"
 	envHTTPReadHeaderTimeout = "HTTP_READ_HEADER_TIMEOUT"
 	envHTTPReadTimeout       = "HTTP_READ_TIMEOUT"
 	envHTTPWriteTimeout      = "HTTP_WRITE_TIMEOUT"

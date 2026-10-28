@@ -11,7 +11,7 @@ func setValidEnv(t *testing.T) {
 	for key, value := range map[string]string{
 		envDebug: "true",
 
-		envHTTPAddr:              ":8080",
+		envHTTPPort:              "8080",
 		envHTTPReadHeaderTimeout: "5s",
 		envHTTPReadTimeout:       "30s",
 		envHTTPWriteTimeout:      "30s",
@@ -73,8 +73,8 @@ func TestLoadServer(t *testing.T) {
 		t.Fatalf("LoadServer() err = %v, want nil", err)
 	}
 
-	if cfg.HTTP.Addr != ":8080" {
-		t.Errorf("HTTP.Addr = %q", cfg.HTTP.Addr)
+	if cfg.HTTP.Port != 8080 {
+		t.Errorf("HTTP.Port = %d", cfg.HTTP.Port)
 	}
 	if cfg.Database.MaxConns != 10 || cfg.Database.MinConns != 1 {
 		t.Errorf("Database conns = (%d, %d)", cfg.Database.MaxConns, cfg.Database.MinConns)
@@ -117,7 +117,7 @@ func TestLoadServer(t *testing.T) {
 func TestLoadServerAccumulatesErrors(t *testing.T) {
 	setValidEnv(t)
 
-	t.Setenv(envHTTPAddr, "")
+	t.Setenv(envHTTPPort, "")
 	t.Setenv(envPostgresPassword, "")
 	t.Setenv(envAuthSessionExpiry, "not-a-duration")
 
@@ -126,7 +126,7 @@ func TestLoadServerAccumulatesErrors(t *testing.T) {
 		t.Fatal("LoadServer() err = nil, want error")
 	}
 
-	for _, key := range []string{envHTTPAddr, envPostgresPassword, envAuthSessionExpiry} {
+	for _, key := range []string{envHTTPPort, envPostgresPassword, envAuthSessionExpiry} {
 		if !strings.Contains(err.Error(), key) {
 			t.Errorf("error does not mention %s: %v", key, err)
 		}
@@ -242,7 +242,7 @@ func TestLoadMailerMissingS3Bucket(t *testing.T) {
 // server's settings.
 func TestLoadMailerIgnoresServerVariables(t *testing.T) {
 	setValidEnv(t)
-	t.Setenv(envHTTPAddr, "")
+	t.Setenv(envHTTPPort, "")
 	t.Setenv(envAuthBaseURL, "")
 	t.Setenv(envEmailRateLimitAddressBurst, "")
 	t.Setenv(envAuthRateLimitEmailBurst, "")
