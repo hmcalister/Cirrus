@@ -12,16 +12,32 @@ async function submit() {
   message.value = "";
   error.value = "";
 
-  const { error: requestError } = await api.POST("/auth/magic-link", {
+  const { error: requestError, response } = await api.POST("/auth/magic-link", {
     body: { email: email.value },
   });
 
-  if (requestError) {
+  if (response.status === 429) {
+    error.value = tooManyRequestsMessage(response);
+  } else if (requestError) {
     error.value = "Something went wrong. Try again.";
   } else {
-    message.value = "A sign-in link has been sent.";
+    message.value =
+      "Sign in link sent!";
   }
   loading.value = false;
+}
+
+// The server sends Retry-After on a 429, so say how long the wait is when it is usable.
+function tooManyRequestsMessage(response: Response): string {
+  const retryAfter = Number(response.headers.get("Retry-After"));
+  if (!Number.isFinite(retryAfter) || retryAfter <= 0) {
+    return "Too many sign-in attempts. Try again shortly.";
+  }
+
+  const minutes = Math.ceil(retryAfter / 60);
+  return minutes <= 1
+    ? "Too many sign-in attempts. Try again in a minute."
+    : `Too many sign-in attempts. Try again in ${minutes} minutes.`;
 }
 </script>
 
