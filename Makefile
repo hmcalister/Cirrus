@@ -1,8 +1,16 @@
-.PHONY: init generate sqlc openapi web-install web-dev web-build build test lint fmt up down
+.PHONY: init generate sqlc openapi web-install web-dev web-build build test lint fmt image up down
 
 SQLC ?= sqlc
 NPM ?= npm
 CONTAINER_ENGINE ?= podman
+PLATFORM ?= linux/amd64
+
+# The image name is owned by .env so compose and make cannot disagree. .env cannot
+# be include'd (its passwords contain # and $), so these two keys are read directly.
+# Keep the values unquoted.
+PROJECT_NAME ?= $(shell sed -n 's/^PROJECT_NAME=//p' .env 2>/dev/null)
+PROJECT_TAG ?= $(shell sed -n 's/^PROJECT_TAG=//p' .env 2>/dev/null)
+IMAGE ?= localhost/$(PROJECT_NAME):$(PROJECT_TAG)
 
 generate: sqlc openapi
 
@@ -37,8 +45,11 @@ lint: generate
 fmt:
 	gofmt -w .
 
+image:
+	$(CONTAINER_ENGINE) build --platform $(PLATFORM) -t $(IMAGE) .
+
 up:
-	$(CONTAINER_ENGINE) compose up --build
+	$(CONTAINER_ENGINE) compose up
 
 down:
 	$(CONTAINER_ENGINE) compose down
