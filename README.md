@@ -11,6 +11,9 @@ A daily cloud image service.
 Cirrus needs a `.env` file in the repository root. At a minimum it must set the values that have no default in `compose.yaml`:
 
 ```sh
+PROJECT_NAME=cirrus
+PROJECT_TAG=version-number
+
 POSTGRES_USER=cirrus
 POSTGRES_PASSWORD=change-me
 POSTGRES_DB=cirrus
@@ -25,6 +28,9 @@ EMAIL_FROM_NAME=Cirrus
 S3_BUCKET=cirrus-clouds
 S3_REGION=region
 S3_ENDPOINT=https://bucket.com
+
+DAILY_EMAIL_TIME="00:00"
+
 ```
 
 The AWS credentials are optional and fall back to the default AWS chain:
@@ -38,7 +44,8 @@ Then:
 
 ```sh
 make init    # install the web dependencies
-make up      # build the image and start the app, mailer, and database
+make image   # build the image
+make up      # start the app, mailer, and database
 make web-dev # for hot reloading the frontend
 ```
 
@@ -119,4 +126,20 @@ After running `make openapi`, the same shape is available in TypeScript:
 import type { components } from "@/api/schema";
 
 type Account = components["schemas"]["Account"];
+```
+
+
+## Deployment
+
+Set your project tag in `.env`, build the image on your host and send to your remote:
+```sh
+make image
+podman image scp localhost/cirrus:<PROJECT_TAG> <REMOTE ADDRESS>
+```
+
+On your remote, clone the repo (or just the compose.yaml file), set your production `.env`, and run:
+```sh
+make up 
+# Or
+podman compose up -d
 ```
