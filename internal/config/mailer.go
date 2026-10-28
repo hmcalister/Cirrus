@@ -3,13 +3,28 @@ package config
 import (
 	"errors"
 	"fmt"
+	"time"
 )
+
+// DailyEmailTimeConfig is the time of day, in UTC, that the daily email job starts.
+type DailyEmailTimeConfig struct {
+	Hour   int
+	Minute int
+}
+
+// Next returns the next occurrence of the configured time of day, in UTC.
+func (c DailyEmailTimeConfig) Next(now time.Time) time.Time {
+	now = now.UTC()
+	next := time.Date(now.Year(), now.Month(), now.Day(), c.Hour, c.Minute, 0, 0, time.UTC)
+	if !next.After(now) {
+		next = next.AddDate(0, 0, 1)
+	}
+	return next
+}
 
 // DailyEmailConfig is when, and how, the daily email job runs.
 type DailyEmailConfig struct {
-	// Time of day, in UTC, that the job starts.
-	Hour   int
-	Minute int
+	DailyEmailTimeConfig
 	// How many recipients share one BCC'd email.
 	BCCBatchSize int
 }
@@ -41,19 +56,28 @@ func LoadMailer() (MailerConfig, error) {
 	return cfg, errors.Join(databaseErr, emailErr, dailyEmailErr, s3Err)
 }
 
-func loadDailyEmail() (DailyEmailConfig, error) {
+// Read the time of day the daily email job starts. The server reads it to show
+// users when their next clouds arrive.
+func loadDailyEmailTime() (DailyEmailTimeConfig, error) {
 	var l loader
 
 	hour, minute := l.clock(envDailyEmailTime)
 
+	return DailyEmailTimeConfig{Hour: hour, Minute: minute}, l.err()
+}
+
+func loadDailyEmail() (DailyEmailConfig, error) {
+	when, whenErr := loadDailyEmailTime()
+
+	var l loader
+
 	cfg := DailyEmailConfig{
-		Hour:         hour,
-		Minute:       minute,
-		BCCBatchSize: l.int(envDailyEmailBCCBatchSize),
+		DailyEmailTimeConfig: when,
+		BCCBatchSize:         l.int(envDailyEmailBCCBatchSize),
 	}
 	if cfg.BCCBatchSize < 1 {
 		l.errs = append(l.errs, fmt.Errorf("environment variable %s must be at least 1", envDailyEmailBCCBatchSize))
 	}
 
-	return cfg, l.err()
+	return cfg, errors.Join(whenErr, l.err())
 }
