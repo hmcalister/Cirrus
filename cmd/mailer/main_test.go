@@ -11,34 +11,9 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/hmcalister/cirrus/internal/config"
 	"github.com/hmcalister/skysatchel/pkg/email/skysender"
 )
-
-func TestNextSendTime(t *testing.T) {
-	at := config.DailyEmailConfig{Hour: 8, Minute: 0}
-	sameDay := time.Date(2026, time.October, 26, 8, 0, 0, 0, time.UTC)
-	nextDay := sameDay.AddDate(0, 0, 1)
-
-	tests := []struct {
-		name string
-		now  time.Time
-		want time.Time
-	}{
-		{"before the send time", sameDay.Add(-30 * time.Minute), sameDay},
-		{"at the send time", sameDay, nextDay},
-		{"after the send time", sameDay.Add(time.Hour), nextDay},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := nextSendTime(tc.now, at); !got.Equal(tc.want) {
-				t.Errorf("nextSendTime(%v) = %v, want %v", tc.now, got, tc.want)
-			}
-		})
-	}
-}
 
 type fakeUsers struct {
 	emails      []string

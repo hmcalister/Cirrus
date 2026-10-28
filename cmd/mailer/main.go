@@ -101,7 +101,7 @@ func run() error {
 	}
 
 	for {
-		next := nextSendTime(time.Now(), cfg.DailyEmail)
+		next := cfg.DailyEmail.Next(time.Now())
 		slog.Info("waiting for the next daily email", "at", next)
 		if !waitUntil(ctx, next) {
 			slog.Info("shutdown signal received")
@@ -125,15 +125,6 @@ func waitUntil(ctx context.Context, at time.Time) bool {
 	case <-timer.C:
 		return true
 	}
-}
-
-// Returns the next occurrence of the configured time of day.
-func nextSendTime(now time.Time, at config.DailyEmailConfig) time.Time {
-	next := time.Date(now.Year(), now.Month(), now.Day(), at.Hour, at.Minute, 0, 0, time.UTC)
-	if !next.After(now) {
-		next = next.AddDate(0, 0, 1)
-	}
-	return next
 }
 
 // Sends the day's cloud to every active user in BCC batches. A failed batch is logged and skipped so that it cannot stop the run.
