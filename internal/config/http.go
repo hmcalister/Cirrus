@@ -3,7 +3,7 @@ package config
 import "time"
 
 type HTTPConfig struct {
-	Addr              string
+	Port              int
 	ReadHeaderTimeout time.Duration
 	ReadTimeout       time.Duration
 	WriteTimeout      time.Duration
@@ -16,7 +16,7 @@ func loadHTTP() (HTTPConfig, error) {
 	var l loader
 
 	cfg := HTTPConfig{
-		Addr:              l.string(envHTTPAddr),
+		Port:              l.int(envHTTPPort),
 		ReadHeaderTimeout: l.duration(envHTTPReadHeaderTimeout),
 		ReadTimeout:       l.duration(envHTTPReadTimeout),
 		WriteTimeout:      l.duration(envHTTPWriteTimeout),
